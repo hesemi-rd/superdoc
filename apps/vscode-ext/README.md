@@ -1,50 +1,33 @@
-# **SuperDoc VS Code Extension**
+# SuperDoc for VS Code
 
-<img src="logo.png" alt="SuperDoc Logo" width="200">
+Open and edit `.docx` files directly in VS Code.
 
-Edit and view DOCX files inside Visual Studio Code with [SuperDoc](https://github.com/superdoc-dev/superdoc).
+## Install
 
-## **Features**
+Search for **SuperDoc** in the VS Code Extensions panel, or:
 
-- **Edit DOCX in VS Code** - Keep your code and documents open side-by-side
-- **Live reload** - When an AI agent or external process modifies your file, your document automatically refreshes
-- **Auto-save** - Changes are saved as you type
-
-## **Usage**
-
-Once installed, any `.docx` file you open will automatically use SuperDoc. Just open a file and start editing.
-
-## **Install**
-
-Not yet on the VS Code Marketplace. Install from VSIX or run from source.
-
-### Install from VSIX
-
-1. Clone the repo and install dependencies:
-   ```
-   npm install
-   ```
-2. Build the VSIX file:
-   ```
-   npm run package
-   ```
-3. In VS Code, open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-4. Run `Extensions: Install from VSIX...`
-5. Select the generated `.vsix` file from the project folder
-
-### Run from source
-
-```
-npm install
-npm run compile
+```bash
+code --install-extension superdoc-dev.superdoc-vscode-ext
 ```
 
-Then press `F5` in VS Code to launch a development window.
+Once installed, `.docx` files open with SuperDoc by default.
+
+## Features
+
+- **Real DOCX editing** — Formatting, tables, lists, headers — all preserved. No conversion to HTML or any intermediate format.
+- **Pagination and rulers** — Documents render with page breaks and ruler guides, just like Word.
+- **Auto-save** — Changes save automatically as you type.
+- **Live reload** — When an AI agent or external process modifies your file, the document refreshes instantly.
+- **Context menu** — Right-click any `.docx` in the Explorer and choose "Open with SuperDoc."
+
+## How it works
+
+SuperDoc renders documents directly from OOXML — the native format of `.docx` files. The extension bundles the full SuperDoc rendering and editing engine in a VS Code webview. No server calls. Your documents never leave your machine.
 
 ## Part of SuperDoc
 
 This extension is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
-## **License**
+## License
 
 AGPL-3.0 · [Enterprise license available](https://superdoc.dev)
