@@ -37,7 +37,21 @@ const config = {
   branches,
   tagFormat: 'vscode-v${version}',
   plugins: [
-    '@semantic-release/commit-analyzer',
+    [
+      '@semantic-release/commit-analyzer',
+      {
+        // Cap at minor — the extension bundles superdoc, so upstream breaking
+        // changes don't break the extension's public API (it has none).
+        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
+        releaseRules: [
+          { breaking: true, release: 'minor' },
+          { type: 'feat', release: 'minor' },
+          { type: 'fix', release: 'patch' },
+          { type: 'perf', release: 'patch' },
+          { type: 'revert', release: 'patch' },
+        ],
+      },
+    ],
     notesPlugin,
     ['@semantic-release/npm', { npmPublish: false }], // Version bump only, no npm publish
   ],
