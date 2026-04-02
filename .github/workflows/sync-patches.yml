@@ -39,13 +39,16 @@ jobs:
           SYNC_BRANCH="sync/stable-to-main-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$SYNC_BRANCH" origin/main
 
-          # Merge stable into the branch
-          if git merge origin/stable --no-edit -m "chore: merge stable into main"; then
+          # Squash-merge stable into the branch so the sync PR has a single commit
+          # (avoids triggering semantic-release comments on every accumulated commit)
+          if git merge --squash origin/stable; then
             # Check if there are actually new commits to sync
-            if git diff --quiet origin/main; then
+            if git diff --cached --quiet; then
               echo "No changes to sync — stable and main are already in sync."
               exit 0
             fi
+
+            git commit -m "chore: merge stable into main"
 
             git push origin "$SYNC_BRANCH"
 
@@ -88,7 +91,7 @@ jobs:
 
             # Check if all conflicts are resolved
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-              git commit --no-edit
+              git commit -m "chore: merge stable into main (release conflicts auto-resolved)"
               git push origin "$SYNC_BRANCH"
 
               gh pr create \
