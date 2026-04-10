@@ -139,6 +139,18 @@ for (const filePath of dtsFiles) {
   });
 
 
+  // Fix .ts extensions in import specifiers → .js
+  // vite-plugin-dts preserves .ts extensions from the source when the entry
+  // point is a .ts file. TypeScript expects .js extensions in .d.ts files.
+  fileContent = fileContent.replace(
+    /(?<=from\s+['"]|import\(['"])([^'"]+)\.ts(?=['"])/g,
+    (match, pathWithoutExt) => {
+      changed = true;
+      totalReplacements++;
+      return `${pathWithoutExt}.js`;
+    },
+  );
+
   if (changed) {
     fs.writeFileSync(filePath, fileContent);
     fixedFiles++;
@@ -161,6 +173,7 @@ if (fixedFiles > 0) {
 const superEditorFacadePath = path.join(distRoot, 'superdoc/src/super-editor.d.ts');
 const expectedSuperEditorFacade = [
   "export * from '../../super-editor/src/editors/v1/index.js';",
+  "export * from '../../super-editor/src/index.js';",
   "export { BLANK_DOCX_BASE64 } from '../../super-editor/src/editors/v1/core/blank-docx.js';",
   "export { getDocumentApiAdapters } from '../../super-editor/src/editors/v1/document-api-adapters/index.js';",
   "export { markdownToPmDoc } from '../../super-editor/src/editors/v1/core/helpers/markdown/index.js';",
@@ -188,8 +201,8 @@ const workspaceImports = new Map(); // module → Set<name>
 for (const filePath of dtsFiles) {
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
-  // Match: import { Foo, Bar } from '...' and import type { Foo } from '...'
-  const namedImports = fileContent.matchAll(/import\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
+  // Match: import/export { Foo, Bar } from '...' and import/export type { Foo } from '...'
+  const namedImports = fileContent.matchAll(/(?:import|export)\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
   for (const m of namedImports) {
     const mod = m[2];
 
@@ -219,7 +232,10 @@ for (const filePath of dtsFiles) {
   const bareRefs = fileContent.matchAll(/['"](@superdoc\/[^'"]+)['"]/g);
   for (const m of bareRefs) {
     const mod = m[1];
-    if (mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    // Skip @superdoc/super-editor (consumer-facing, not internal)
+    // Skip @superdoc/common root module (inlined separately), but allow subpath
+    // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
+    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor')) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }

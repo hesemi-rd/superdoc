@@ -546,7 +546,7 @@
  * @typedef {Object} Config
  * @property {string} [superdocId] The ID of the SuperDoc
  * @property {string | HTMLElement} selector The selector or element to mount the SuperDoc into
- * @property {DocumentMode} documentMode The mode of the document
+ * @property {DocumentMode} [documentMode] The mode of the document (default: 'editing')
  * @property {'editor' | 'viewer' | 'suggester'} [role] The role of the user in this SuperDoc
  * @property {Object | string | File | Blob} [document] The document to load. If a string, it will be treated as a URL. If a File or Blob, it will be used directly.
  * @property {string} [password] Password for encrypted DOCX files. Forwarded during document load.
@@ -621,6 +621,10 @@
  * @property {boolean} [warnOnUnsupportedContent] When true and no onUnsupportedContent callback is provided, emits a console.warn with unsupported items
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
+ * @property {boolean} [contained] Enable contained mode for fixed-height container embedding.
+ *   When true, SuperDoc propagates height through its DOM tree and adds internal scrolling,
+ *   so multi-page documents scroll within the consumer's fixed-height container.
+ *   Default behavior (false) lets the document expand to its natural height.
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  * @property {string} [licenseKey] License key for organization identification
  * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration

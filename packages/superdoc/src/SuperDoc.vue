@@ -715,6 +715,7 @@ const editorOptions = (doc) => {
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
+    contained: proxy.$superdoc.config.contained,
     linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
     layoutEngineOptions: useLayoutEngine
       ? {
@@ -1480,6 +1481,7 @@ const getPDFViewer = () => {
     :class="{
       'superdoc--with-sidebar': showCommentsSidebar,
       'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+      'superdoc--contained': proxy.$superdoc.config.contained,
       'high-contrast': isHighContrastMode,
     }"
     :style="superdocStyleVars"
@@ -1640,8 +1642,7 @@ const getPDFViewer = () => {
   min-width: 300px;
   width: 300px;
   height: 100%;
-  overflow-y: hidden;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .superdoc__layers {
@@ -1677,6 +1678,21 @@ const getPDFViewer = () => {
   top: 0;
   height: 100%;
   position: relative;
+}
+
+/* In contained mode, overlay layers must not take flow space.
+ * With height:100% resolved on .superdoc__document, this element's
+ * position:relative + height:100% takes the full container height,
+ * pushing .superdoc__sub-document out of view. */
+.superdoc--contained .superdoc__comments-layer {
+  position: absolute;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Re-enable pointer events on comment anchors so highlights remain clickable */
+.superdoc--contained .sd-comment-anchor {
+  pointer-events: auto;
 }
 
 .superdoc__right-sidebar {

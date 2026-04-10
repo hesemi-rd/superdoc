@@ -213,7 +213,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const editor = superdocRef.current.activeEditor;
         const success = editor.commands.updateStructuredContentById?.(id, {
           attrs: updates,
-        });
+        }) as boolean | undefined;
 
         if (success) {
           setTemplateFields((prev) => {
@@ -258,7 +258,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         let commandResult = false;
         try {
-          commandResult = editor.commands.deleteStructuredContentById?.(id) ?? false;
+          commandResult = (editor.commands.deleteStructuredContentById?.(id) as boolean | undefined) ?? false;
         } catch (err) {
           console.warn('[TemplateBuilder] Failed to delete structured content:', id, err);
           commandResult = false;
