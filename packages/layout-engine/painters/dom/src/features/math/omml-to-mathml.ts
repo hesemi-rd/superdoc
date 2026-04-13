@@ -21,6 +21,7 @@ import {
   convertSubSuperscript,
   convertAccent,
   convertPreSubSuperscript,
+  convertEquationArray,
   convertRadical,
   convertLowerLimit,
   convertUpperLimit,
@@ -47,6 +48,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:acc': convertAccent, // Accent (diacritical mark above base)
   'm:bar': convertBar, // Bar (overbar/underbar)
   'm:d': convertDelimiter, // Delimiter (parentheses, brackets, braces)
+  'm:eqArr': convertEquationArray, // Equation array (vertical array of equations)
   'm:f': convertFraction, // Fraction (numerator/denominator)
   'm:func': convertFunction, // Function apply (sin, cos, log, etc.)
   'm:limLow': convertLowerLimit, // Lower limit (e.g., lim)
@@ -60,7 +62,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:borderBox': null, // Border box (border around math content)
   'm:box': null, // Box (invisible grouping container)
-  'm:eqArr': null, // Equation array (vertical array of equations)
   'm:groupChr': null, // Group character (overbrace, underbrace)
   'm:m': null, // Matrix (grid of elements)
   'm:nary': null, // N-ary operator (integral, summation, product)

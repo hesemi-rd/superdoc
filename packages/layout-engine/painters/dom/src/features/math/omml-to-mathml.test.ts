@@ -2569,3 +2569,142 @@ describe('m:limUpp converter', () => {
     expect(mover!.children[1]!.textContent).toBe('x');
   });
 });
+
+describe('m:eqArr converter', () => {
+  it('converts equation array to left-aligned <mtable>', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:eqArr',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '=' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '=' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '2' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).not.toBeNull();
+    const mtable = result!.querySelector('mtable');
+    expect(mtable).not.toBeNull();
+    expect(mtable!.getAttribute('columnalign')).toBe('left');
+    const rows = mtable!.querySelectorAll('mtr');
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.textContent).toBe('x=1');
+    expect(rows[1]!.textContent).toBe('y=2');
+  });
+
+  it('returns null for empty equation array', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [{ name: 'm:eqArr', elements: [] }],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    expect(result).toBeNull();
+  });
+
+  it('strips & alignment markers from row content', () => {
+    // ECMA-376 §22.1.2.34: `&` inside m:t is an alignment marker, not literal text.
+    // The converter doesn't yet map these to MathML alignment elements, so they
+    // should be stripped rather than rendered.
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:eqArr',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '&=' }] }] },
+                { name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: '1' }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const rows = result!.querySelectorAll('mtr');
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.textContent).toBe('x=1');
+    expect(rows[0]!.textContent).not.toContain('&');
+  });
+
+  it('ignores m:eqArrPr properties element', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:eqArr',
+          elements: [
+            { name: 'm:eqArrPr', elements: [{ name: 'm:ctrlPr' }] },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'x' }] }] }],
+            },
+            {
+              name: 'm:e',
+              elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'y' }] }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const rows = result!.querySelectorAll('mtr');
+    expect(rows.length).toBe(2);
+    expect(rows[0]!.textContent).toBe('x');
+    expect(rows[1]!.textContent).toBe('y');
+  });
+
+  it('preserves nested math (fraction) inside rows', () => {
+    const omml = {
+      name: 'm:oMath',
+      elements: [
+        {
+          name: 'm:eqArr',
+          elements: [
+            {
+              name: 'm:e',
+              elements: [
+                {
+                  name: 'm:f',
+                  elements: [
+                    {
+                      name: 'm:num',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'a' }] }] }],
+                    },
+                    {
+                      name: 'm:den',
+                      elements: [{ name: 'm:r', elements: [{ name: 'm:t', elements: [{ type: 'text', text: 'b' }] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = convertOmmlToMathml(omml, doc);
+    const mfrac = result!.querySelector('mtable mtr mtd mfrac');
+    expect(mfrac).not.toBeNull();
+  });
+});
