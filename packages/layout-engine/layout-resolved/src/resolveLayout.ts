@@ -10,12 +10,14 @@ import type {
   ParaFragment,
   TableFragment,
   Line,
+  ParagraphBorders,
   ResolvedLayout,
   ResolvedPage,
   ResolvedPaintItem,
   ResolvedFragmentItem,
   ResolvedParagraphContent,
   ListMeasure,
+  ListBlock,
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
@@ -24,6 +26,8 @@ import { resolveTableItem } from './resolveTable.js';
 import { resolveImageItem } from './resolveImage.js';
 import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
+import { computeSdtContainerKey } from './sdtContainerKey.js';
+import { hashParagraphBorders } from './paragraphBorderHash.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -125,16 +129,64 @@ function resolveParagraphContentIfApplicable(
   return resolveParagraphContent(fragment, entry.block as ParagraphBlock, entry.measure as ParagraphMeasure);
 }
 
+function resolveFragmentParagraphBorders(
+  fragment: Fragment,
+  blockMap: Map<string, BlockMapEntry>,
+): ParagraphBorders | undefined {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return undefined;
+
+  if (fragment.kind === 'para' && entry.block.kind === 'paragraph') {
+    return (entry.block as ParagraphBlock).attrs?.borders;
+  }
+
+  if (fragment.kind === 'list-item' && entry.block.kind === 'list') {
+    const block = entry.block as ListBlock;
+    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
+    return item?.paragraph.attrs?.borders;
+  }
+
+  return undefined;
+}
+
+function resolveFragmentSdtContainerKey(fragment: Fragment, blockMap: Map<string, BlockMapEntry>): string | null {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return null;
+  const block = entry.block;
+
+  if (fragment.kind === 'para' && block.kind === 'paragraph') {
+    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  }
+
+  if (fragment.kind === 'list-item' && block.kind === 'list') {
+    const listBlock = block as ListBlock;
+    const item = listBlock.items.find((listItem) => listItem.id === fragment.itemId);
+    return computeSdtContainerKey(item?.paragraph.attrs?.sdt, item?.paragraph.attrs?.containerSdt);
+  }
+
+  if (fragment.kind === 'table' && block.kind === 'table') {
+    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  }
+
+  // image, drawing — no SDT container keys
+  return null;
+}
+
 function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
   pageIndex: number,
   blockMap: Map<string, BlockMapEntry>,
 ): ResolvedPaintItem {
+  const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
+
   // Route to kind-specific resolvers for types that carry extracted block/measure data.
   switch (fragment.kind) {
-    case 'table':
-      return resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+    case 'table': {
+      const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      return item;
+    }
     case 'image':
       return resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
     case 'drawing':
@@ -155,6 +207,14 @@ function resolveFragmentItem(
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+
+      // Pre-compute paragraph border data for between-border grouping
+      const borders = resolveFragmentParagraphBorders(fragment, blockMap);
+      if (borders) {
+        item.paragraphBorders = borders;
+        item.paragraphBorderHash = hashParagraphBorders(borders);
+      }
       if (fragment.kind === 'para') {
         const para = fragment as ParaFragment;
         if (para.pmStart != null) item.pmStart = para.pmStart;

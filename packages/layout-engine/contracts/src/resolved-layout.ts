@@ -6,6 +6,7 @@ import type {
   ImageFragmentMetadata,
   Line,
   PageMargins,
+  ParagraphBorders,
   SectionVerticalAlign,
   TableBlock,
   TableMeasure,
@@ -118,6 +119,12 @@ export type ResolvedFragmentItem = {
   markerWidth?: number;
   /** Pre-resolved paragraph content for non-table paragraph fragments. */
   content?: ResolvedParagraphContent;
+  /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
+  sdtContainerKey?: string | null;
+  /** Pre-computed hash of paragraph borders for between-border grouping. */
+  paragraphBorderHash?: string;
+  /** Pre-extracted paragraph borders for between-border rendering. */
+  paragraphBorders?: ParagraphBorders;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -232,6 +239,8 @@ export type ResolvedTableItem = {
   cellSpacingPx: number;
   /** Pre-computed effective column widths: fragment.columnWidths ?? measure.columnWidths. */
   effectiveColumnWidths: number[];
+  /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
+  sdtContainerKey?: string | null;
 };
 
 /**
@@ -268,6 +277,8 @@ export type ResolvedImageItem = {
   block: ImageBlock;
   /** Image metadata for interactive resizing (original dimensions, aspect ratio). */
   metadata?: ImageFragmentMetadata;
+  /** Pre-computed SDT container key for boundary grouping (typically null for images). */
+  sdtContainerKey?: string | null;
 };
 
 /**
@@ -302,6 +313,8 @@ export type ResolvedDrawingItem = {
   pmEnd?: number;
   /** Pre-extracted DrawingBlock (replaces blockLookup.get()). */
   block: DrawingBlock;
+  /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
+  sdtContainerKey?: string | null;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */
