@@ -254,6 +254,17 @@ export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
   /** Raw Layout for internal fragment access. */
   sourceLayout: Layout;
+  /**
+   * Optional bridge data used only when a decoration provider omits `items`.
+   * Body rendering reads from `resolvedLayout`; these arrays exist solely so
+   * header/footer fragments can synthesize resolved items on demand.
+   */
+  blocks?: FlowBlock[];
+  measures?: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
 };
 
 export type PageDecorationPayload = {
@@ -6844,11 +6855,7 @@ export class DomPainter {
       return true;
     }
 
-    return (
-      section === 'header' &&
-      fragment.kind === 'drawing' &&
-      this.isHeaderWordArtWatermark(resolvedItem?.block)
-    );
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
