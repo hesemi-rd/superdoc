@@ -5,12 +5,12 @@ Tiny demo focused on one thing: open a realtime collaboration session from Pytho
 `main.py` is currently hardcoded for the local `@y/hub` server in `./yjs-hub`.
 It uses the pip-installed `superdoc-sdk` CLI companion by default
 and the async Python SDK client (`AsyncSuperDocClient`)
-and writes `/download` output to `examples/collaboration/fastapi/.superdoc-state/download.docx`.
+and writes `/download` output to `examples/editor/collaboration/backends/fastapi/.superdoc-state/download.docx`.
 
 ## 1) FastAPI setup
 
 ```bash
-cd examples/collaboration/fastapi
+cd examples/editor/collaboration/backends/fastapi
 uv venv .venv
 source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -23,14 +23,14 @@ uv pip install -r requirements.txt
 From the FastAPI folder:
 
 ```bash
-cd examples/collaboration/fastapi
+cd examples/editor/collaboration/backends/fastapi
 ./run-yjs-hub.sh
 ```
 
 Or manually:
 
 ```bash
-cd examples/collaboration/fastapi/yjs-hub
+cd examples/editor/collaboration/backends/fastapi/yjs-hub
 pnpm install --ignore-workspace --lockfile=false
 pnpm run deps:up
 pnpm run dev
@@ -71,7 +71,7 @@ If you use Option B, update `main.py` to point back to that server URL.
 ## 3) Start FastAPI
 
 ```bash
-cd examples/collaboration/fastapi
+cd examples/editor/collaboration/backends/fastapi
 uvicorn main:app --reload --port 8000
 ```
 
