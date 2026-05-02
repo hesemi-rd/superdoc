@@ -349,7 +349,7 @@ export class SuperDoc extends EventEmitter {
       this.config.modules.comments = {};
     }
 
-    this.config.colors = shuffleArray(this.config.colors);
+    this.config.colors = shuffleArray(/** @type {`#${string}`[]} */ (this.config.colors));
     /** @type {Map<unknown, unknown>} */
     this.userColorMap = new Map();
     this.colorIndex = 0;
@@ -472,7 +472,7 @@ export class SuperDoc extends EventEmitter {
     document.createElement = function (tagName) {
       const element = originalCreateElement.call(this, tagName);
       if (tagName.toLowerCase() === 'style') {
-        element.setAttribute('nonce', cspNonce);
+        element.setAttribute('nonce', /** @type {string} */ (cspNonce));
       }
       return element;
     };
@@ -506,7 +506,7 @@ export class SuperDoc extends EventEmitter {
         {
           id: uuidv4(),
           type: DOCX,
-          url: this.config.document,
+          url: /** @type {string} */ (this.config.document),
           name: 'document.docx',
         },
       ];
@@ -645,7 +645,7 @@ export class SuperDoc extends EventEmitter {
     // Start a socket for all documents and general metaMap for this SuperDoc
     if (collaborationModuleConfig.providerType === 'hocuspocus') {
       this.config.socket = new HocuspocusProviderWebsocket({
-        url: collaborationModuleConfig.url,
+        url: /** @type {string} */ (collaborationModuleConfig.url),
       });
     }
 
@@ -1688,7 +1688,7 @@ export class SuperDoc extends EventEmitter {
     fieldsHighlightColor = null,
   } = {}) {
     // Get the docx files first
-    const baseFileName = exportedName ? cleanName(exportedName) : cleanName(this.config.title);
+    const baseFileName = exportedName ? cleanName(exportedName) : cleanName(/** @type {string} */ (this.config.title));
     const docxFiles = await this.exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor });
     const blobsToZip = [...additionalFiles];
     const filenames = [...additionalFileNames];
