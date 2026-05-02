@@ -75,6 +75,25 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
 
 /**
+ * Config callbacks are optional on the public typedef because consumers do
+ * not need to pass them. The fields wrapped by this helper (every callback
+ * registered in `#initListeners` plus the toolbar `exception` listener)
+ * default to `() => null` in the class-field initializer, so EventEmitter
+ * receives a function in normal use. This helper is a runtime identity
+ * cast: behavior is unchanged if that invariant is ever broken (e.g. a
+ * consumer explicitly passes `undefined`), and EventEmitter sees the same
+ * value it would have without the wrapper. Sites with a `null` default
+ * (`onFontsResolved`, `onTrackedChangeBubbleAccept`, `onTrackedChangeBubbleReject`)
+ * use a separate `if`-guard pattern instead of this helper.
+ *
+ * @param {((...args: any[]) => void) | undefined} listener
+ * @returns {(...args: any[]) => void}
+ */
+function asEventListener(listener) {
+  return /** @type {(...args: any[]) => void} */ (listener);
+}
+
+/**
  * SuperDoc class
  * Expects a config object
  *
@@ -558,21 +577,21 @@ export class SuperDoc extends EventEmitter {
   }
 
   #initListeners() {
-    this.on('editorBeforeCreate', this.config.onEditorBeforeCreate);
-    this.on('editorCreate', this.config.onEditorCreate);
-    this.on('editorDestroy', this.config.onEditorDestroy);
-    this.on('ready', this.config.onReady);
-    this.on('comments-update', this.config.onCommentsUpdate);
-    this.on('awareness-update', this.config.onAwarenessUpdate);
-    this.on('locked', this.config.onLocked);
-    this.on('pdf:document-ready', this.config.onPdfDocumentReady);
-    this.on('sidebar-toggle', this.config.onSidebarToggle);
-    this.on('collaboration-ready', this.config.onCollaborationReady);
-    this.on('editor-update', this.config.onEditorUpdate);
+    this.on('editorBeforeCreate', asEventListener(this.config.onEditorBeforeCreate));
+    this.on('editorCreate', asEventListener(this.config.onEditorCreate));
+    this.on('editorDestroy', asEventListener(this.config.onEditorDestroy));
+    this.on('ready', asEventListener(this.config.onReady));
+    this.on('comments-update', asEventListener(this.config.onCommentsUpdate));
+    this.on('awareness-update', asEventListener(this.config.onAwarenessUpdate));
+    this.on('locked', asEventListener(this.config.onLocked));
+    this.on('pdf:document-ready', asEventListener(this.config.onPdfDocumentReady));
+    this.on('sidebar-toggle', asEventListener(this.config.onSidebarToggle));
+    this.on('collaboration-ready', asEventListener(this.config.onCollaborationReady));
+    this.on('editor-update', asEventListener(this.config.onEditorUpdate));
     this.on('content-error', this.onContentError);
-    this.on('exception', this.config.onException);
-    this.on('list-definitions-change', this.config.onListDefinitionsChange);
-    this.on('pagination-update', this.config.onPaginationUpdate);
+    this.on('exception', asEventListener(this.config.onException));
+    this.on('list-definitions-change', asEventListener(this.config.onListDefinitionsChange));
+    this.on('pagination-update', asEventListener(this.config.onPaginationUpdate));
 
     if (this.config.onFontsResolved) {
       this.on('fonts-resolved', this.config.onFontsResolved);
@@ -1248,7 +1267,7 @@ export class SuperDoc extends EventEmitter {
 
     this.toolbar = new SuperToolbar(config);
 
-    this.toolbar.on('exception', this.config.onException);
+    this.toolbar.on('exception', asEventListener(this.config.onException));
     // `this.toolbar` infers as `SuperToolbar | null` from the field's
     // first assignment in `#addToolbar` (the `null` placeholder a few
     // lines up). The closure registers after the SuperToolbar instance
