@@ -5711,6 +5711,7 @@ describe('DomPainter', () => {
                 width: 300,
                 pmStart: 1,
                 pmEnd: 15,
+                markerTextWidth: 12,
               },
             ],
           },
@@ -5764,6 +5765,7 @@ describe('DomPainter', () => {
       const painter = createTestPainter({
         blocks: [paragraphBlock],
         measures: [paragraphMeasure],
+        showFormattingMarks: true,
       });
 
       painter.setResolvedLayout(resolvedLayout);
@@ -5772,10 +5774,15 @@ describe('DomPainter', () => {
       const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
       const markerEl = mount.querySelector('.superdoc-paragraph-marker') as HTMLElement;
       const tabEl = mount.querySelector('.superdoc-tab') as HTMLElement;
+      const paragraphMark = mount.querySelector('.superdoc-formatting-paragraph-mark') as HTMLElement;
 
       expect(markerEl.textContent).toBe('1.');
       expect(lineEl.style.paddingLeft).toBe('36px');
+      expect(tabEl.classList.contains('superdoc-marker-suffix-tab')).toBe(true);
       expect(tabEl.style.width).toBe('24px');
+      expect(tabEl.style.fontSize).toBe('12px');
+      expect(paragraphMark.textContent).toBe('¶');
+      expect(paragraphMark.style.left).toBe('232px');
     });
 
     it('renders a resolved drop cap without a legacy descriptor on the block', () => {
