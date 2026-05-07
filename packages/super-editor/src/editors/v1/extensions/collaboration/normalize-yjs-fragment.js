@@ -11,7 +11,7 @@ const CROSS_REFERENCE_NODE_NAME = 'crossReference';
  * @returns {boolean}
  */
 export function normalizeYjsFragmentForSchema(fragment) {
-  if (!fragment || typeof fragment.toArray !== 'function') return false;
+  if (!isTraversableYjsXml(fragment)) return false;
 
   let changed = false;
   const normalize = () => {
@@ -28,10 +28,40 @@ export function normalizeYjsFragmentForSchema(fragment) {
 }
 
 /**
+ * @param {Array<{ target?: unknown }> | null | undefined} events
+ * @param {import('yjs').XmlFragment | null | undefined} fallbackFragment
+ * @returns {boolean}
+ */
+export function normalizeYjsFragmentEventsForSchema(events, fallbackFragment) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return normalizeYjsFragmentForSchema(fallbackFragment);
+  }
+
+  let changed = false;
+  const visited = new Set();
+  for (const event of events) {
+    const target = event?.target;
+    if (!isTraversableYjsXml(target) || visited.has(target)) continue;
+    visited.add(target);
+    changed = stripCrossReferenceChildren(target) || changed;
+  }
+
+  return changed;
+}
+
+/**
  * @param {import('yjs').XmlFragment | import('yjs').XmlElement} parent
  * @returns {boolean}
  */
 function stripCrossReferenceChildren(parent) {
+  if (!isTraversableYjsXml(parent)) return false;
+
+  if (parent instanceof XmlElement && parent.nodeName === CROSS_REFERENCE_NODE_NAME) {
+    if (parent.length === 0) return false;
+    parent.delete(0, parent.length);
+    return true;
+  }
+
   let changed = false;
 
   for (const child of parent.toArray()) {
@@ -49,4 +79,8 @@ function stripCrossReferenceChildren(parent) {
   }
 
   return changed;
+}
+
+function isTraversableYjsXml(value) {
+  return Boolean(value && typeof value.toArray === 'function');
 }

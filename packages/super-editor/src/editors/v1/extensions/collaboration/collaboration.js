@@ -8,7 +8,7 @@ import {
 } from '../../core/helpers/collaboration-provider-sync.js';
 import { bootstrapPartSync } from './part-sync/index.js';
 import { seedPartsFromEditor } from './part-sync/seed-parts.js';
-import { normalizeYjsFragmentForSchema } from './normalize-yjs-fragment.js';
+import { normalizeYjsFragmentEventsForSchema, normalizeYjsFragmentForSchema } from './normalize-yjs-fragment.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -300,8 +300,8 @@ const registerYjsFragmentNormalizer = (fragment) => {
     return () => {};
   }
 
-  const normalize = () => {
-    normalizeYjsFragmentForSchema(fragment);
+  const normalize = (events) => {
+    normalizeYjsFragmentEventsForSchema(events, fragment);
   };
 
   fragment.observeDeep(normalize);
