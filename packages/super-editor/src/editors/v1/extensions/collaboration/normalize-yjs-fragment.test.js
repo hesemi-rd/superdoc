@@ -29,6 +29,23 @@ describe('normalizeYjsFragmentForSchema', () => {
     }
   });
 
+  it('normalizes nested crossReference children during a full fragment walk', () => {
+    const ydoc = new YDoc();
+    const root = ydoc.getXmlFragment('supereditor');
+    const paragraph = new XmlElement('paragraph');
+    const crossReference = new XmlElement('crossReference');
+    crossReference.insert(0, [new XmlElement('run')]);
+    paragraph.insert(0, [crossReference]);
+    root.insert(0, [paragraph]);
+
+    try {
+      expect(normalizeYjsFragmentForSchema(root)).toBe(true);
+      expect(crossReference.length).toBe(0);
+    } finally {
+      ydoc.destroy();
+    }
+  });
+
   it('normalizes an ancestor crossReference when the changed event target is nested text', () => {
     const ydoc = new YDoc();
     const root = ydoc.getXmlFragment('supereditor');
