@@ -40,7 +40,7 @@ export function normalizeYjsFragmentEventsForSchema(events, fallbackFragment) {
   let changed = false;
   const visited = new Set();
   for (const event of events) {
-    const target = event?.target;
+    const target = findNormalizableEventTarget(event?.target);
     if (!isTraversableYjsXml(target) || visited.has(target)) continue;
     visited.add(target);
     changed = stripCrossReferenceChildren(target) || changed;
@@ -79,6 +79,18 @@ function stripCrossReferenceChildren(parent) {
   }
 
   return changed;
+}
+
+function findNormalizableEventTarget(target) {
+  let current = target;
+  while (current) {
+    if (current instanceof XmlElement && current.nodeName === CROSS_REFERENCE_NODE_NAME) {
+      return current;
+    }
+    current = current.parent;
+  }
+
+  return target;
 }
 
 function isTraversableYjsXml(value) {
