@@ -232,6 +232,47 @@ describe('anchored metadata wrappers', () => {
     expect(metadataListWrapper(editor).total).toBe(0);
   });
 
+  it('attach dry-run reports REVISION_MISMATCH when expectedRevision is stale', () => {
+    const editor = makeEditor();
+
+    const result = metadataAttachWrapper(
+      editor,
+      { id: 'stale-attach', target: TARGET, namespace: 'urn:test:metadata', payload: { label: 'Preview' } },
+      { changeMode: 'direct', dryRun: true, expectedRevision: 'stale-1' },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      failure: { code: 'REVISION_MISMATCH' },
+    });
+    expect(metadataListWrapper(editor).total).toBe(0);
+  });
+
+  it('remove dry-run reports REVISION_MISMATCH when expectedRevision is stale', () => {
+    const editor = makeEditor();
+
+    // Seed an entry so remove finds something to act on; without this it
+    // would short-circuit with TARGET_NOT_FOUND before the revision check.
+    metadataAttachWrapper(
+      editor,
+      { id: 'seed', target: TARGET, namespace: 'urn:test:metadata', payload: { v: 1 } },
+      { changeMode: 'direct' },
+    );
+
+    const result = metadataRemoveWrapper(
+      editor,
+      { id: 'seed' },
+      { changeMode: 'direct', dryRun: true, expectedRevision: 'stale-1' },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      failure: { code: 'REVISION_MISMATCH' },
+    });
+    // The seeded entry remains intact — dry-run with stale revision must not mutate.
+    expect(metadataGetWrapper(editor, { id: 'seed' })?.payload).toEqual({ v: 1 });
+  });
+
   it('resolves an existing anchor tag to its text range', () => {
     const sdt = createNode('structuredContent', [createNode('text', [], { text: 'Hello' })], {
       attrs: { id: '100', tag: 'meta-1' },

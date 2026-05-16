@@ -69,7 +69,7 @@ type MetadataPart = {
   entries: MetadataEntry[];
 };
 
-type FailureCode = 'INVALID_INPUT' | 'INVALID_TARGET' | 'TARGET_NOT_FOUND';
+type FailureCode = 'INVALID_INPUT' | 'INVALID_TARGET' | 'TARGET_NOT_FOUND' | 'REVISION_MISMATCH';
 
 type FailureResult = {
   success: false;
@@ -78,6 +78,24 @@ type FailureResult = {
 
 function failure(code: FailureCode, message: string): FailureResult {
   return { success: false, failure: { code, message } };
+}
+
+/**
+ * Dry-run paths take an early-return shortcut and don't go through
+ * `executeOutOfBandMutation` / `executeDomainCommand`, which means they
+ * also skip the revision guard those helpers run. Mirror the guard here
+ * so optimistic-concurrency previews stay honest: `dryRun: true` with a
+ * stale `expectedRevision` must report `REVISION_MISMATCH`, same as the
+ * real path would.
+ */
+function revisionMismatchFailure(editor: Editor, expectedRevision: string | undefined): FailureResult | null {
+  if (expectedRevision === undefined) return null;
+  const current = getRevision(editor);
+  if (expectedRevision === current) return null;
+  return failure(
+    'REVISION_MISMATCH',
+    `Expected revision "${expectedRevision}" but document is at "${current}". Re-run query.match() to obtain a fresh ref.`,
+  );
 }
 
 function getConverter(editor: Editor): ConverterWithConvertedXml | null {
@@ -463,6 +481,8 @@ export function metadataAttachWrapper(
 
   const preview = writeEntry(editor, input.namespace, id, input.payload, true);
   if (options?.dryRun) {
+    const stale = revisionMismatchFailure(editor, options.expectedRevision);
+    if (stale) return stale;
     return { success: true, id, namespace: input.namespace, partName: preview.partName };
   }
 
@@ -520,6 +540,8 @@ export function metadataRemoveWrapper(
   }
 
   if (options?.dryRun) {
+    const stale = revisionMismatchFailure(editor, options.expectedRevision);
+    if (stale) return stale;
     return { success: true, id: input.id };
   }
 
