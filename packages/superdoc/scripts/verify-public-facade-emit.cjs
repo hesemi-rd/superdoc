@@ -113,7 +113,12 @@ const FACADE_ENTRIES = [
     name: 'legacy/converter',
     esm: path.join(PUBLIC_DIST, 'legacy', 'converter.d.ts'),
     cjs: null,
-    expectedNames: ['SuperConverter'],
+    // AIDEV-NOTE: `hasBodyNumberingReferences` is in the runtime contract
+    // of today's `superdoc/converter` (see
+    // `packages/superdoc/dist/super-editor/converter.es.js`) but missing
+    // from the existing types entry. The facade types both so Phase 4
+    // can flip without regressing JS consumers.
+    expectedNames: ['SuperConverter', 'hasBodyNumberingReferences'],
     runsCommandSignatureProbe: false,
     ticket: 'SD-3180',
   },

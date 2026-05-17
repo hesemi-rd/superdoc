@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SuperConverter } from './converter.js';
+import { SuperConverter, hasBodyNumberingReferences } from './converter.js';
 
 /**
  * Smoke test for the legacy public facade converter entry (SD-3180).
@@ -9,5 +9,9 @@ import { SuperConverter } from './converter.js';
 describe('public facade (legacy/converter)', () => {
   it('re-exports SuperConverter as a constructor', () => {
     expect(typeof SuperConverter).toBe('function');
+  });
+
+  it('re-exports hasBodyNumberingReferences as a function', () => {
+    expect(typeof hasBodyNumberingReferences).toBe('function');
   });
 });

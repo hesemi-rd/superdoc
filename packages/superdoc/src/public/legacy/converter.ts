@@ -8,12 +8,17 @@
  * `docs/architecture/package-boundaries.md` Decision 4. New code should
  * import `SuperConverter` from `superdoc` directly.
  *
- * AIDEV-NOTE: Single-export facade. Growing this list ships a new public
- * symbol through a legacy compat path, which violates the no-growth
- * posture this entry is classified under. Adding or removing an export
- * here updates the `expectedNames` for the `legacy/converter` entry in
- * `FACADE_ENTRIES` inside
+ * AIDEV-NOTE: The runtime contract for `superdoc/converter` today exports
+ * both `SuperConverter` and `hasBodyNumberingReferences` (see
+ * `packages/superdoc/dist/super-editor/converter.es.js`). The existing
+ * types entry only declares `SuperConverter`, so the SD-3176 typed
+ * snapshot shows 1 name while the runtime contract has 2. This facade
+ * types both so Phase 4 can flip `package.json#exports` without
+ * regressing JS consumers doing
+ * `import { hasBodyNumberingReferences } from 'superdoc/converter'`.
+ * Adding or removing an export here updates the `expectedNames` for
+ * the `legacy/converter` entry in `FACADE_ENTRIES` inside
  * `packages/superdoc/scripts/verify-public-facade-emit.cjs` in the
  * same PR.
  */
-export { SuperConverter } from '@superdoc/super-editor/converter';
+export { SuperConverter, hasBodyNumberingReferences } from '@superdoc/super-editor/converter';
