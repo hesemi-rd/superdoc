@@ -259,8 +259,15 @@ const FACADE_ENTRIES = [
   // (defineNode, defineMark, isNodeType, assertNodeType, isMarkType)
   // but kept type-only here to match today's contract.
   //
-  // SD-3147 classification: 37 public + 79 legacy/public-compat. The
-  // existing `./types` package.json#exports entry uses split
+  // SD-3147 classification (corrected, see SD-3185): 26 public + 90
+  // legacy/public-compat. Command-augmentation infrastructure
+  // (CoreCommandMap, ExtensionCommandMap, EditorCommands, etc.) is
+  // legacy/public-compat — typed for backward compat, kept compiling,
+  // not advertised — per the @deprecated tags on `editor.commands` in
+  // Editor.ts and AGENTS.md's "use editor.doc" guidance. All 116 names
+  // remain in the facade; only the tier label changes.
+  //
+  // The existing `./types` package.json#exports entry uses split
   // types.import/types.require, so this facade has a real .d.cts shim
   // and the verifier exercises ESM/CJS parity.
   {

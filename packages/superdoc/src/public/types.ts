@@ -6,9 +6,22 @@
  * `superdoc/types` subpath — schema attributes, command maps, ProseMirror
  * JSON shapes, augmentation infrastructure, and theme types.
  *
- * Classification per SD-3147: 37 public + 79 legacy/public-compat. All
- * 116 re-exported through the facade — tier distinction is documentation
+ * Classification per SD-3147 (corrected): **26 public + 90 legacy/public-compat**.
+ * All 116 re-exported through the facade — tier distinction is documentation
  * posture, not facade inclusion.
+ *
+ * The original SD-3147 classification labeled the command-augmentation
+ * infrastructure (`CoreCommandMap`, `ExtensionCommandMap`, `EditorCommands`,
+ * `CoreCommands`, `ExtensionCommands`, `CommandProps`, `Command`,
+ * `ChainedCommand`, `ChainableCommandObject`, `CanCommand`, `CanObject`)
+ * as `public, reason: augmentation-infrastructure`. That tier is wrong:
+ * those types exist to type the `editor.commands.*` surface, which is
+ * marked `@deprecated` in `Editor.ts` (lines 1411, 1597, 1605) and
+ * `packages/superdoc/AGENTS.md` ("editor commands is deprecated and will
+ * be removed; use the Document API"). Reclassifying as legacy/public-compat
+ * matches policy: typed for backward compat, kept compiling, not advertised
+ * as recommended API. Phase 4's package.json#exports flip preserves them
+ * unchanged. SD-3185 carries the SD-3147 corrigendum.
  *
  * `superdoc/types` is a **type-only** subpath. The runtime artifact
  * (`dist/types.es.js`) is effectively empty. Five names that have value
