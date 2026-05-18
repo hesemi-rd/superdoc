@@ -18,6 +18,14 @@
  *      Per `packages/superdoc/AGENTS.md` and the `@deprecated` tags on
  *      `editor.commands` in `Editor.ts`: this is the supported way to
  *      read and mutate document content programmatically.
+ *
+ *      Caveat: Document API does not cover every legacy editor command
+ *      1:1 today. Field annotations, document section management, AI
+ *      marks, search-session UI state, and several format/diff helpers
+ *      exist as runtime commands without a direct Document API analogue.
+ *      The legacy command surface is being audited against the Document
+ *      API in a separate ticket; consumers reaching for those features
+ *      should expect to keep using `editor.commands.*` for now.
  *   3. **Legacy compat — typed for backward compat, not advertised.**
  *      `EditorCommands` and the command-augmentation infrastructure
  *      type the deprecated `editor.commands.*` surface. They remain
