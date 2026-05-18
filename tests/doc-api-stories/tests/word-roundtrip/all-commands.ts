@@ -110,16 +110,20 @@ describe('document-api story: Word round-trip preserves anchored metadata', () =
       expect(resolved?.target?.start?.kind).toBe('text');
       expect(resolved?.target?.end?.kind).toBe('text');
 
-      // `list({ within })` scoped to the resolved range still returns the citation — the anchor
-      // is still inside its own resolved range after Word's run-splitting. Text-content equality
-      // of the resolved range against the edited string is not asserted here.
-      const within = await callDocOperation<any>('metadata.list', {
-        sessionId,
-        namespace: NAMESPACE,
-        within: resolved.target,
-      });
-      const withinIds = (within?.items ?? []).map((item: any) => item?.id ?? item?.domain?.id);
-      expect(withinIds).toContain(CITE_ID);
+      // Independent text-content check via `extract` — slice the resolved block's text using the
+      // resolved start/end offsets and assert the inserted word ("reasonable") plus the original
+      // anchor head and tail ("duty", "care") all fall inside the SDT range. This is independent
+      // of `metadata.resolve` because `extract` reads the document body, not the customXml store.
+      const extracted = await callDocOperation<any>('extract', { sessionId });
+      const startBlockId = resolved.target.start.blockId;
+      const endBlockId = resolved.target.end.blockId;
+      expect(endBlockId).toBe(startBlockId); // fixture invariant: anchor is intra-paragraph
+      const block = (extracted?.blocks ?? []).find((b: any) => b?.nodeId === startBlockId);
+      expect(block?.text).toBeTruthy();
+      const selectedText = String(block.text).slice(resolved.target.start.offset, resolved.target.end.offset);
+      expect(selectedText).toContain('duty');
+      expect(selectedText).toContain('reasonable');
+      expect(selectedText).toContain('care');
     });
   });
 });
