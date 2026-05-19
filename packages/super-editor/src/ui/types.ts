@@ -124,12 +124,17 @@ export interface SuperDocEditorLike {
     /**
      * Anchored-metadata member on the Document API. Used by
      * `ui.metadata.*` to look up an entry's resolved range from its
-     * id. Structurally typed loose for the same stub-friendly reason
-     * as `comments` / `trackChanges` / `contentControls`; the
-     * controller asserts the concrete `AnchoredMetadataResolveInfo`
-     * shape after calling.
+     * id, and to verify (via `get`) that the id actually maps to a
+     * stored payload before delegating to the SDT-keyed geometry
+     * path — a w:tag on its own can come from a Word-authored
+     * content control with no metadata payload, so the payload side
+     * has to agree. Structurally typed loose for the same
+     * stub-friendly reason as `comments` / `trackChanges` /
+     * `contentControls`; the controller asserts the concrete shapes
+     * after calling.
      */
     metadata?: {
+      get?(input: { id: string }): unknown | null;
       resolve?(input: { id: string }): unknown | null;
     };
     /**

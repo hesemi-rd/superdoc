@@ -2262,9 +2262,26 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // Confirm `id` actually maps to a stored metadata payload before
+  // we trust the cc.items tag→nodeId map. An imported DOCX can carry
+  // foreign inline content controls whose `w:tag` happens to match a
+  // metadata id; without this gate, a tag-only lookup would return
+  // the foreign control's geometry. The source path
+  // (`editor.doc.metadata.resolve`) was tightened to require both
+  // halves of the anchor (SDT + payload) to agree; this defensive
+  // gate keeps `ui.metadata.*` symmetrical for direct callers that
+  // skip `resolve`.
+  const hasMetadataPayload = (id: string): boolean => {
+    const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
+    const getFn = editor?.doc?.metadata?.get;
+    if (typeof getFn !== 'function') return false;
+    return getFn.call(editor!.doc!.metadata!, { id }) !== null;
+  };
+
   const metadata: MetadataHandle = {
     getRect({ id }: { id: string }) {
       if (!id) return { success: false, reason: 'invalid-target' };
+      if (!hasMetadataPayload(id)) return { success: false, reason: 'unresolved' };
       const ccId = findContentControlIdByMetadataId(id);
       if (ccId === null) return { success: false, reason: 'unresolved' };
       return contentControls.getRect({ id: ccId });
@@ -2279,6 +2296,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       behavior?: ScrollIntoViewInput['behavior'];
     }): Promise<ScrollIntoViewOutput> {
       if (!id) return { success: false };
+      if (!hasMetadataPayload(id)) return { success: false };
       const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
       const resolveFn = editor?.doc?.metadata?.resolve;
       if (typeof resolveFn !== 'function') return { success: false };
