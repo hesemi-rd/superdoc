@@ -34,27 +34,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 
 const skipPack = process.argv.includes('--skip-pack');
-const skipTypeCheck = process.argv.includes('--skip-public-types-check');
 
-// SD-2860: before doing any of the matrix work, fail fast if the public-type
-// surface drifted from the assertion list. Otherwise a developer who added a
-// new public typedef can ship past every other gate without an assertion for
-// the new type.
-if (!skipTypeCheck) {
-  console.log('Checking public-type surface against the assertion list...');
-  try {
-    execSync('node check-public-types.mjs', {
-      cwd: __dirname,
-      stdio: 'inherit',
-    });
-  } catch (e) {
-    console.error('\nPublic-type surface check failed (see message above).');
-    console.error('Run `node tests/consumer-typecheck/check-public-types.mjs --write` from the repo root (or `npm run check:types:write` from inside `tests/consumer-typecheck/`) to regenerate the assertion list, then commit the result.');
-    console.error('(`tests/consumer-typecheck` is intentionally outside the pnpm workspace, so `pnpm --filter` cannot reach it.)');
-    process.exit(1);
-  }
-  console.log();
-}
+// SD-3213a (retire SD-2860 source-sync gate): the public-type surface is now
+// canonically defined in `packages/superdoc/src/public/index.ts` and is
+// snapshot-locked by `snapshot-superdoc-root-exports.mjs` + classified by
+// `superdoc-root-classification.json` + closure-gated by
+// `check-root-classification-closure.mjs` and verified by
+// `verify-public-facade-emit.cjs`. The pre-flip source-sync check that
+// pointed at `packages/superdoc/src/index.js`'s JSDoc typedef block was
+// removed because that file is no longer the source of truth.
+// `src/all-public-types.ts` remains as a static fixture for the SD-2842
+// "all public types are real" scenarios below.
 
 if (!skipPack) {
   console.log('Packing superdoc and reinstalling fixture...');

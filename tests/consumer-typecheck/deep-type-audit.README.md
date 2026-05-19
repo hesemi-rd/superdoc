@@ -165,11 +165,22 @@ default `auto-seeded from inventory` rationale.
 - `typecheck-matrix.mjs`: runs `tsc --noEmit` under N consumer tsconfigs.
   Catches *resolution* errors and *missing exports*. Doesn't see member-level
   `any`.
-- `check-public-types.mjs`: verifies every public `@typedef` has an
-  assertion fixture. Asserts top-level type aliases aren't `any`. Doesn't
-  see member-level `any`.
+- `snapshot-superdoc-root-exports.mjs --check`: locks the 200-name root
+  surface across the four `package.json#exports` sources (types.import,
+  types.require, import, require). Catches silent surface growth.
+- `verify-public-facade-emit.cjs`: verifies the curated `src/public/**`
+  facade matches the emitted `.d.ts` (symbol set, ESM/CJS parity, leak
+  grep, command-signature probe).
+- `check-root-classification-closure.mjs`: dependency-closure rule — no
+  supported-root or legacy-root export references an internal-candidate
+  type in its public declared type.
 - **deep-type-audit.mjs (this)**: recursive walk; catches what the others
-  cannot. Together the three gates form the public-type contract guarantee.
+  cannot.
+
+(`check-public-types.mjs` was retired in SD-3213a after the root facade
+flip — the canonical root contract is now `packages/superdoc/src/public/index.ts`
+plus the snapshot/facade-verifier gates above, not the legacy JSDoc
+typedef block in `packages/superdoc/src/index.js`.)
 
 ## CI wiring
 

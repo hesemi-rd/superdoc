@@ -6,13 +6,19 @@
  * `const _real_X: AssertNotAny<X> = true` lines fail to compile if X
  * has collapsed. A missing export shows up as TS2305 on the import.
  *
- * THIS FILE IS GENERATED from the JSDoc @typedef block in
- * packages/superdoc/src/index.js. Edit the typedef block (or run
- *   node tests/consumer-typecheck/check-public-types.mjs --write
- * from the repo root, or `npm run check:types:write` from inside
- * tests/consumer-typecheck) and commit both. SD-2860's check script enforces
- * that the two stay in sync; a missing assertion fails CI with a message
- * pointing at this script.
+ * SD-3213a (post root facade flip): this file is now a STATIC FIXTURE,
+ * not a generated artifact. The pre-flip source-sync gate (SD-2860,
+ * `check-public-types.mjs`) pointed at the legacy
+ * `packages/superdoc/src/index.js` typedef block, which is no longer
+ * the source of truth for the root contract. The canonical root
+ * surface is now `packages/superdoc/src/public/index.ts`, locked by
+ * `tests/consumer-typecheck/snapshots/superdoc-root-exports.json` and
+ * classified at `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
+ *
+ * When a new root export lands, manually add a corresponding
+ * `import { X } from 'superdoc';` + `const _real_X: AssertNotAny<X> = ...;`
+ * line below. The SD-2842 scenarios in `typecheck-matrix.mjs` exercise
+ * this file to catch any new types collapsing to `any`.
  */
 import type {
   BinaryData,
