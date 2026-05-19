@@ -31,16 +31,11 @@
  *     "deprecated to nothing" noise in customer IDEs).
  */
 
-// `@superdoc/common` package-root re-exports trip vite-plugin-dts:
-// it follows the `export * from './...'` chain and lands on the wrong
-// file (`shared/common/comments-types.js`). Deep imports skip that
-// resolution by pointing directly at the defining files.
-// The `?url` asset import uses import-then-export so the private
-// `@superdoc/*` specifier doesn't leak into the emitted .d.ts (would
-// fail audit-declarations.cjs).
-import { DOCX, PDF, HTML } from '@superdoc/common/document-types';
-import { getFileObject } from '@superdoc/common/helpers/get-file-object';
-import { compareVersions } from '@superdoc/common/helpers/compare-superdoc-versions';
+// The common package is workspace-private. Source imports stay readable here;
+// ensure-types.cjs strips and inlines the emitted declarations so consumers
+// never resolve @superdoc/common from the packed package.
+import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/common';
+// @ts-expect-error Vite resolves DOCX asset URL imports; plain tsc does not.
 import BlankDOCXAsset from '@superdoc/common/data/blank.docx?url';
 /** URL to the blank DOCX template. */
 export const BlankDOCX: string = BlankDOCXAsset;
@@ -55,8 +50,8 @@ export { DOCX, PDF, HTML, getFileObject, compareVersions };
 export { SuperDoc } from '../core/SuperDoc.js';
 
 // Source: ./core/theme/create-theme.ts
-export { buildTheme } from '../core/theme/create-theme.ts';
-export { createTheme } from '../core/theme/create-theme.ts';
+export { buildTheme } from '../core/theme/create-theme.js';
+export { createTheme } from '../core/theme/create-theme.js';
 
 // Type source: ./core/types/index.js
 export type { AwarenessState } from '../core/types/index.js';
