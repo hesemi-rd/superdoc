@@ -29,7 +29,7 @@ import { SuperDocCliError } from './runtime/errors.js';
  *
  * @internal
  */
-export class BoundRuntime implements RuntimeInvoker {
+class BoundRuntime implements RuntimeInvoker {
   private readonly runtime: SuperDocRuntime;
   private readonly sessionId: string;
   private closed = false;
