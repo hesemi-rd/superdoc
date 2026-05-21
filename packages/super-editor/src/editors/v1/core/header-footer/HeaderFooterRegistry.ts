@@ -193,8 +193,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
    *
    * SD-3240: cannot be a type predicate (`editor is EditorWithConverter`)
    * because `Editor.converter` is `EditorConverterSurface` while
-   * `EditorWithConverter` overrides it to `HeaderFooterCollections` —
-   * the two shapes don't share a subtype relationship. Callers narrow
+   * `EditorWithConverter` overrides it to `HeaderFooterCollections`.
+   * The two shapes don't share a subtype relationship. Callers narrow
    * with a local cast after the check.
    *
    * @param editor - The editor instance to check

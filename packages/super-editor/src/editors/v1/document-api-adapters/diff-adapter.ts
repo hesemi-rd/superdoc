@@ -30,7 +30,7 @@ import { DocumentApiAdapterError } from './errors.js';
 export function createDiffAdapter(editor: Editor): DiffAdapter {
   // SD-3240: DiffServiceEditor narrows `converter` to specific diff-
   // related shapes (StylesDocumentProperties, NumberingProperties)
-  // that overlap with — but don't structurally match —
+  // that overlap with, but don't structurally match,
   // EditorConverterSurface. Cast at the boundary; runtime shape is
   // identical.
   const diffEditor = editor as unknown as DiffServiceEditor;

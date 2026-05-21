@@ -53,7 +53,7 @@ type GetActiveFormattingElement = GetActiveFormattingReturn extends Array<infer 
 const _elementIsNotAny: Equal<GetActiveFormattingElement, any> = false;
 void _elementIsNotAny;
 
-// --- Reach through editor.converter — a known surface member stays typed -
+// --- Reach through editor.converter: known surface members stay typed ---
 
 // `documentGuid` is declared on the public surface as `string | null`.
 // If the field type regresses to `any`, this exact-type check breaks.
@@ -62,3 +62,22 @@ const guid: string | null = editor.converter.documentGuid;
 void guid;
 const _guidIsExact: Equal<typeof editor.converter.documentGuid, string | null> = true;
 void _guidIsExact;
+
+// `getDocumentCreatedTimestamp()` returns an ISO timestamp string
+// (e.g. `'2024-01-15T10:30:00Z'`) or `null`. SD-3240 review caught a
+// surface-vs-runtime mismatch where the field was originally typed as
+// `number | null`; this assertion pins the correct shape so a future
+// drift back to number (or any) fails the typecheck matrix.
+const createdAt: string | null = editor.converter.getDocumentCreatedTimestamp();
+void createdAt;
+const _createdAtIsExact: Equal<ReturnType<typeof editor.converter.getDocumentCreatedTimestamp>, string | null> = true;
+void _createdAtIsExact;
+
+// `getDocumentIdentifier()` is async at the converter level (the
+// `null` fallback lives on `Editor.getDocumentIdentifier()` for the
+// converter-missing case). The original surface mistakenly typed it as
+// synchronous `string | null`; this assertion pins `Promise<string>`.
+const identifier: Promise<string> = editor.converter.getDocumentIdentifier();
+void identifier;
+const _identifierIsExact: Equal<ReturnType<typeof editor.converter.getDocumentIdentifier>, Promise<string>> = true;
+void _identifierIsExact;

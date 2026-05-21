@@ -649,12 +649,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       try {
         const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() ?? null;
-        this.#telemetry.trackDocumentOpen(
-          documentId,
-          // SD-3240: telemetry signature expects a string; numbers get
-          // coerced via JSON-friendly stringification at the boundary.
-          documentCreatedAt == null ? null : String(documentCreatedAt),
-        );
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
         this.#documentOpenTracked = true;
       } catch {
         // Fail silently - telemetry should never break the app
@@ -1116,7 +1111,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // SD-3240: readSettingsRoot accepts a narrow `ConverterWithDocumentSettings`
     // shape that overlaps with EditorConverterSurface but uses a
     // different `pageStyles` typing (alternateHeaders flag). Cast to
-    // the local narrow interface — both shapes are honest no-`any`
+    // the local narrow interface. Both shapes are honest no-`any`
     // contracts on the same runtime instance.
     const settingsRoot = this.converter
       ? readSettingsRoot(this.converter as unknown as Parameters<typeof readSettingsRoot>[0])
@@ -3260,7 +3255,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.#validateDocumentExport();
 
-      if (exportXmlOnly || exportJsonOnly) return documentXml;
+      // SD-3240: converter surface returns `string | Record<string, unknown>`
+      // (the JSON-only branch returns the intermediate xml-js tree).
+      // The Editor.exportDocx implementation signature here declares the
+      // outer union as `Record<string, string | null>` which is a pre-
+      // existing narrower shape than the runtime JSON tree. Cast at the
+      // bridge so the public surface stays honest.
+      if (exportXmlOnly || exportJsonOnly) return documentXml as string | Record<string, string | null>;
 
       const customXml = this.converter.schemaToXml(this.converter.convertedXml['docProps/custom.xml'].elements[0]);
       const styles = this.converter.schemaToXml(this.converter.convertedXml['word/styles.xml'].elements[0]);

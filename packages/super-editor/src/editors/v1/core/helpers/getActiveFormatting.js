@@ -13,7 +13,7 @@ import { findMark } from './findMark.js';
 /**
  * Narrow structural editor shape consumed by `getActiveFormatting`.
  * Only `state` (PM EditorState) + `storage.formatCommands.storedStyle`
- * are needed — avoids resurfacing SD-3240 debt through full Editor.
+ * are needed. Avoids resurfacing SD-3240 debt through full Editor.
  *
  * @typedef {{
  *   state: import('prosemirror-state').EditorState;

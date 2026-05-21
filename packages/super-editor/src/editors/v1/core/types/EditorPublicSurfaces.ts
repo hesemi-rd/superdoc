@@ -109,7 +109,7 @@ export interface EditorConverterSurface {
   themeColors: unknown;
   translatedLinkedStyles: unknown;
   /**
-   * Translated numbering model — same `abstracts` / `definitions`
+   * Translated numbering model: same `abstracts` / `definitions`
    * shape as `numbering` but with rendered values applied. Internal
    * helpers iterate both maps.
    */
@@ -117,14 +117,21 @@ export interface EditorConverterSurface {
 
   // --- Methods ---
   /**
-   * Export the converted document to a DOCX-shaped output. The
-   * runtime may return a Blob, a Buffer (Node), a string (XML),
-   * or a Record map keyed by package path — consumers narrow
-   * based on the export mode.
+   * Convert the current document tree to DOCX XML. Returns the
+   * exported XML string by default, or the intermediate
+   * `Record<string, unknown>` JSON tree when called with
+   * `exportJsonOnly: true`. The `Blob` / `Buffer` wrapping happens
+   * upstream in `Editor.exportDocx()` (which feeds the result into
+   * a zipper), not here.
    */
-  exportToDocx(...args: unknown[]): Promise<string | Blob | Buffer | Record<string, string>>;
+  exportToDocx(...args: unknown[]): Promise<string | Record<string, unknown>>;
   getBibliographyPartExportPaths(): readonly string[];
-  getDocumentCreatedTimestamp(): number | null;
+  /**
+   * ISO-8601 `dcterms:created` timestamp from core.xml (e.g.
+   * `'2024-01-15T10:30:00Z'`), or `null` if core.xml is missing or
+   * has no created element.
+   */
+  getDocumentCreatedTimestamp(): string | null;
   /**
    * Document default styles for font rendering: typeface, font size
    * (pt), and CSS font-family stack. Used by ProseMirrorRenderer to
@@ -140,7 +147,15 @@ export interface EditorConverterSurface {
     | null
     | undefined;
   getDocumentFonts(): string[];
-  getDocumentIdentifier(): string | null;
+  /**
+   * Async. Returns the stable document identifier (GUID-based
+   * `identifierHash` when both GUID and timestamp exist, otherwise a
+   * `contentHash` and a backfilled GUID/timestamp pair). Resolves to
+   * a non-null string in every code path; the `null` fallback lives
+   * on `Editor.getDocumentIdentifier()` for the converter-missing
+   * case.
+   */
+  getDocumentIdentifier(): Promise<string>;
   /** Returns `{ styleString, fontsImported }` for font face injection. */
   getFontFaceImportString():
     | {
