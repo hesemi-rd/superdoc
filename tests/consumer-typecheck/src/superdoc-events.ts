@@ -242,24 +242,53 @@ superdoc.on('exception', (payload) => {
 // @ts-expect-error SD-3213: SuperDocEventMap is closed; unknown events are not allowed.
 superdoc.on('reayd', () => {});
 
-// --- Host contract: real SuperDoc + broad custom stub both compile ---------
+// --- Host contract: real SuperDoc + narrow + broad stubs all compile -------
 
 // `createHeadlessToolbar({ superdoc })` and `createSuperDocUI({ superdoc })`
 // accept a real SuperDoc instance even after the closed event-map
-// tightening. The host shapes (`HeadlessToolbarSuperdocHost`,
-// `SuperDocLike`) narrowed their `on`/`off` event-name unions to the
-// events the host actually consumes (`SuperDocHostEvent`), so SuperDoc's
-// closed-map `on` is structurally assignable.
+// tightening. The host shapes split their `on`/`off` event-name unions
+// to exactly what each controller subscribes to:
+// `HeadlessToolbarSuperdocHostEvent` (4 events) for the toolbar host,
+// `SuperDocUIHostEvent` (3 events) for the UI controller. SuperDoc's
+// closed `SuperDocEventMap`-typed `on` satisfies both.
 import { createHeadlessToolbar } from 'superdoc/headless-toolbar';
 import { createSuperDocUI } from 'superdoc/ui';
 void createHeadlessToolbar({ superdoc });
 void createSuperDocUI({ superdoc });
 
-// Custom host stubs typed with a wider `on(event: string, ...)` signature
-// remain assignable to the narrower host contract: a stub that accepts
-// any string still accepts the specific events the host will pass.
-declare const customHost: {
+// Custom UI host stub typed precisely to the 3 events the UI
+// controller subscribes to must satisfy `SuperDocLike`. Pinning this
+// so a future widening of `SuperDocUIHostEvent` (e.g. re-adding
+// `formatting-marks-change`) doesn't silently regress this stub
+// shape: such a change would fail this assertion under strict
+// (property-syntax) variance, and would still be a precision loss
+// even under TS method bivariance.
+declare const customUIHost: {
+  on?(event: 'editorCreate' | 'document-mode-change' | 'zoomChange', handler: (...args: unknown[]) => void): unknown;
+  off?(event: 'editorCreate' | 'document-mode-change' | 'zoomChange', handler: (...args: unknown[]) => void): unknown;
+};
+void createSuperDocUI({ superdoc: customUIHost });
+
+// Custom toolbar host stub typed precisely to the 4 events the
+// toolbar subscribes to must satisfy `HeadlessToolbarSuperdocHost`.
+declare const customToolbarHost: {
+  on?: (
+    event: 'editorCreate' | 'document-mode-change' | 'formatting-marks-change' | 'zoomChange',
+    listener: (...args: any[]) => void,
+  ) => void;
+  off?: (
+    event: 'editorCreate' | 'document-mode-change' | 'formatting-marks-change' | 'zoomChange',
+    listener: (...args: any[]) => void,
+  ) => void;
+};
+void createHeadlessToolbar({ superdoc: customToolbarHost });
+
+// Broad string-based custom stubs remain assignable to both host
+// contracts: a function that accepts any string can be called with
+// the specific event names the host will pass.
+declare const broadHost: {
   on?: (event: string, listener: (...args: unknown[]) => void) => void;
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
-void createHeadlessToolbar({ superdoc: customHost });
+void createHeadlessToolbar({ superdoc: broadHost });
+void createSuperDocUI({ superdoc: broadHost });

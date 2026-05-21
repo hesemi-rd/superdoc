@@ -3,18 +3,23 @@ import type { PresentationEditor } from '../editors/v1/core/presentation-editor/
 import type { DocumentApi } from '@superdoc/document-api';
 
 /**
- * Event names a SuperDoc-like host must accept on its `on`/`off`
- * methods to be usable with the headless toolbar and UI controller.
- * Narrow union so a real `SuperDoc` instance (with the SD-3213 closed
+ * Event names the headless toolbar host subscribes to. Narrow union
+ * so a real `SuperDoc` instance (with the SD-3213 closed
  * `SuperDocEventMap`-typed `on`) satisfies the structural host
  * contract. Custom host stubs typed with a wider
  * `on?: (event: string, ...) => void` are still assignable.
  *
- * Owned here (not in `ui/types.ts`) because `ui/types.ts` already
- * imports from this file; reversing the dependency would create a
- * cycle.
+ * Split from the UI controller's narrower
+ * `SuperDocUIHostEvent` (`ui/types.ts`, 3 events) because the toolbar
+ * additionally subscribes to `formatting-marks-change`; requiring the
+ * UI controller's `SuperDocLike` stub to accept that 4th event would
+ * be wider than the UI side actually consumes.
  */
-export type SuperDocHostEvent = 'editorCreate' | 'document-mode-change' | 'formatting-marks-change' | 'zoomChange';
+export type HeadlessToolbarSuperdocHostEvent =
+  | 'editorCreate'
+  | 'document-mode-change'
+  | 'formatting-marks-change'
+  | 'zoomChange';
 
 /**
  * The editable surface that currently owns the toolbar context.
@@ -276,9 +281,9 @@ type HeadlessToolbarSuperdocHostBase = {
   toggleFormattingMarks?: () => void;
   // The toolbar only subscribes to these SuperDoc events; keeping the
   // host event names narrow lets strict event maps satisfy this
-  // structural host contract. See `SuperDocHostEvent` above.
-  on?: (event: SuperDocHostEvent, listener: (...args: any[]) => void) => void;
-  off?: (event: SuperDocHostEvent, listener: (...args: any[]) => void) => void;
+  // structural host contract. See `HeadlessToolbarSuperdocHostEvent` above.
+  on?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
+  off?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
 };
 
 /**
