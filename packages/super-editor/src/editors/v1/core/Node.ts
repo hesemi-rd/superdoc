@@ -7,7 +7,7 @@ import type { NodeView, EditorView, Decoration, DecorationSource } from 'prosemi
 import type { InputRule } from './InputRule.js';
 import type { Editor } from './Editor.js';
 import type { Command } from './types/ChainedCommands.js';
-import type { AttributeSpec } from './Attribute.js';
+import type { AttributeSpec, AttributeValue } from './Attribute.js';
 
 /**
  * Attribute object accepted inside a `SuperDocDOMOutputSpec` tuple.
@@ -50,6 +50,22 @@ export type SuperDocDOMOutputSpec =
   | globalThis.Node
   | { dom: globalThis.Node; contentDOM?: HTMLElement }
   | SuperDocDOMOutputSpecTuple;
+
+/**
+ * Public function signature for `NodeConfig.renderDOM`. Function-only
+ * (not `MaybeGetter`) because the runtime in
+ * `packages/super-editor/src/editors/v1/core/Schema.js:99` invokes
+ * `renderDOM({ node, htmlAttributes })` directly with no
+ * `callOrGet()` wrapper. Typing it as `MaybeGetter<T>` would
+ * advertise a direct-value form that throws `TypeError` at runtime.
+ *
+ * `htmlAttributes` is the `Record<string, AttributeValue>` that
+ * `Attribute.getAttributesToRender()` returns at runtime.
+ */
+export type RenderDOMFn = (props: {
+  node: PmNode;
+  htmlAttributes: Record<string, AttributeValue>;
+}) => SuperDocDOMOutputSpec;
 
 /**
  * Configuration for Node extensions.
@@ -111,14 +127,20 @@ export interface NodeConfig<
   parseDOM?: MaybeGetter<ParseRule[]>;
 
   /**
-   * The DOM rendering function. Returns a `SuperDocDOMOutputSpec`:
-   * a public local alias mirroring ProseMirror's `DOMOutputSpec`
-   * shape but with an unknown-free tuple branch (the upstream type
-   * uses `readonly [string, ...any[]]`, which leaked `any` into the
-   * SD-3213 supported-root audit). Accepts both readonly and mutable
-   * arrays for JS extension compatibility.
+   * The DOM rendering function for the node. Receives
+   * `{ node, htmlAttributes }` at runtime (see `Schema.js:99`) and
+   * returns a `SuperDocDOMOutputSpec`: a public local alias
+   * mirroring ProseMirror's `DOMOutputSpec` shape but with an
+   * unknown-free tuple branch.
+   *
+   * Typed as a plain function (`RenderDOMFn`) rather than
+   * `MaybeGetter<SuperDocDOMOutputSpec>` because the runtime only
+   * invokes the function form. A direct-value `renderDOM: ['br']`
+   * type-checks under `MaybeGetter<T>` but throws `TypeError` at
+   * runtime. Narrowing the type aligns the public contract with
+   * what the runtime actually supports.
    */
-  renderDOM?: MaybeGetter<SuperDocDOMOutputSpec>;
+  renderDOM?: RenderDOMFn;
 
   /** Function or object to add options to the node */
   addOptions?: MaybeGetter<Options>;

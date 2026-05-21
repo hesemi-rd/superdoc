@@ -60,14 +60,21 @@ defineNode({
   },
 });
 
-// MaybeGetter: renderDOM accepts either a function returning the
-// spec OR the spec directly. Pinning the value form too.
+// --- Negative assertions -------------------------------------------------
+
+// renderDOM is function-only at the type level, matching what the
+// runtime in `Schema.js:99` actually supports (`renderDOM({ node,
+// htmlAttributes })`). A direct-value form like `renderDOM: ['br']`
+// would throw `TypeError: renderDOM is not a function` at runtime,
+// so the public type rejects it. If a future PR re-widens the field
+// to `MaybeGetter<SuperDocDOMOutputSpec>` (or back to PM's tuple-
+// containing union), the directive becomes unused and tsc fails
+// (TS2578).
 defineNode({
-  name: 'directValueForm',
+  name: 'directValueRejected',
+  // @ts-expect-error SD-3213: renderDOM is function-only; runtime invokes it as a callable.
   renderDOM: ['br'],
 });
-
-// --- Negative assertions -------------------------------------------------
 
 // A number can't be an attrs object or child spec. If a future PR
 // widens the tuple element type back to `any` or `unknown`, this
