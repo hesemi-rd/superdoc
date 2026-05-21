@@ -132,7 +132,7 @@ export const Paragraph = OxmlNode.create({
   addAttributes() {
     return {
       paraId: { rendered: false, keepOnSplit: false },
-      textId: { rendered: false },
+      textId: { rendered: false, keepOnSplit: false },
       rsidR: { rendered: false },
       rsidRDefault: { rendered: false },
       rsidP: { rendered: false },
