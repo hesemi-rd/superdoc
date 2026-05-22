@@ -1,8 +1,83 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
-import { TrackInsertMarkName } from '@extensions/track-changes/constants.js';
+import { TrackDeleteMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/trackChangesBasePlugin.js';
+
+const ALICE = { name: 'Alice Reviewer', email: 'alice@example.com' };
+const BOB = { name: 'Bob Reviewer', email: 'bob@example.com' };
+const FIXED_DATE = '2026-05-21T00:00:00.000Z';
+const FOREIGN_INSERT_ID = 'foreign-insert';
+const INSERTED_TEXT = 'here is my new text, do you like it?';
+const INSERTED_TAIL = 'do you like it?';
+
+const findTextRange = (editor, text) => {
+  let found = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (found || !node.isText || !node.text) return;
+    const index = node.text.indexOf(text);
+    if (index === -1) return;
+    found = { from: pos + index, to: pos + index + text.length };
+    return false;
+  });
+  if (!found) throw new Error(`Text not found: ${text}`);
+  return found;
+};
+
+const markEntries = (editor, markName) => {
+  const entries = [];
+  editor.state.doc.descendants((node) => {
+    if (!node.isText || !node.text) return;
+    for (const mark of node.marks ?? []) {
+      if (mark.type?.name === markName) entries.push({ text: node.text, mark });
+    }
+  });
+  return entries;
+};
+
+const textForMarkId = (editor, markName, id) =>
+  markEntries(editor, markName)
+    .filter(({ mark }) => mark.attrs?.id === id)
+    .map(({ text }) => text)
+    .join('');
+
+const setDocumentWithTrackedInsertion = (editor, { author = ALICE, id = FOREIGN_INSERT_ID } = {}) => {
+  const { schema } = editor;
+  const insertMark = schema.marks[TrackInsertMarkName].create({
+    id,
+    author: author.name,
+    authorEmail: author.email,
+    date: FIXED_DATE,
+  });
+  const doc = schema.nodes.doc.create(
+    {},
+    schema.nodes.paragraph.create(
+      {},
+      schema.nodes.run.create({}, [
+        schema.text('hello there '),
+        schema.text(INSERTED_TEXT, [insertMark]),
+        schema.text(' after'),
+      ]),
+    ),
+  );
+
+  editor.dispatch(
+    editor.state.tr
+      .replaceWith(0, editor.state.doc.content.size, doc.content)
+      .setMeta('skipTrackChanges', true)
+      .setMeta('inputType', 'test-setup'),
+  );
+};
+
+const deleteText = (editor, text) => {
+  const { from, to } = findTextRange(editor, text);
+  editor.dispatch(editor.state.tr.delete(from, to).setMeta('inputType', 'deleteContentBackward'));
+};
+
+const replaceText = (editor, text, replacement) => {
+  const { from, to } = findTextRange(editor, text);
+  editor.dispatch(editor.state.tr.insertText(replacement, from, to).setMeta('inputType', 'insertText'));
+};
 
 describe('Editor dispatch tracked-change meta', () => {
   let editor;
@@ -138,5 +213,126 @@ describe('Editor dispatch tracked-change meta', () => {
         authorEmail: 'test@example.com',
       }),
     );
+  });
+
+  it('protects another user tracked insertion from direct delete while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    const trackState = TrackChangesBasePluginKey.getState(editor.state);
+    expect(trackState?.isTrackChangesActive ?? false).toBe(false);
+
+    deleteText(editor, INSERTED_TAIL);
+
+    expect(editor.state.doc.textContent).toContain(INSERTED_TEXT);
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
+
+    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === INSERTED_TAIL);
+    expect(childDeletion?.mark.attrs).toEqual(
+      expect.objectContaining({
+        authorEmail: BOB.email,
+        overlapParentId: FOREIGN_INSERT_ID,
+      }),
+    );
+  });
+
+  it('protects another user tracked insertion from direct replace while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    replaceText(editor, INSERTED_TAIL, 'yes');
+
+    expect(editor.state.doc.textContent).toContain(INSERTED_TAIL);
+    expect(editor.state.doc.textContent).toContain('yes');
+
+    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === INSERTED_TAIL);
+    expect(childDeletion?.mark.attrs).toEqual(
+      expect.objectContaining({
+        authorEmail: BOB.email,
+        overlapParentId: FOREIGN_INSERT_ID,
+      }),
+    );
+
+    const childInsertion = markEntries(editor, TrackInsertMarkName).find(
+      ({ text, mark }) => text === 'yes' && mark.attrs?.id !== FOREIGN_INSERT_ID,
+    );
+    expect(childInsertion?.mark.attrs).toEqual(
+      expect.objectContaining({
+        authorEmail: BOB.email,
+        overlapParentId: FOREIGN_INSERT_ID,
+      }),
+    );
+  });
+
+  it('emits review comment state for a protected child deletion instead of only truncating the parent', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    const emitSpy = vi.spyOn(editor, 'emit');
+    deleteText(editor, INSERTED_TAIL);
+
+    const childDeletionEvent = emitSpy.mock.calls.find(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'add' &&
+        payload?.trackedChangeType === TrackDeleteMarkName,
+    )?.[1];
+
+    expect(childDeletionEvent).toEqual(
+      expect.objectContaining({
+        deletedText: expect.stringContaining(INSERTED_TAIL),
+        authorEmail: BOB.email,
+      }),
+    );
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
+  });
+
+  it('still allows direct deletion of untracked plain text while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>hello plain text</p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+
+    deleteText(editor, 'plain ');
+
+    expect(editor.state.doc.textContent).toBe('hello text');
+    expect(markEntries(editor, TrackInsertMarkName)).toHaveLength(0);
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
+  });
+
+  it('collapses the current user own insertion on direct delete without creating a child review item', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor, { author: BOB, id: 'own-insert' });
+
+    deleteText(editor, INSERTED_TEXT);
+
+    expect(editor.state.doc.textContent).toBe('hello there  after');
+    expect(markEntries(editor, TrackInsertMarkName).filter(({ mark }) => mark.attrs?.id === 'own-insert')).toHaveLength(
+      0,
+    );
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
   });
 });
