@@ -83,6 +83,16 @@ function buildEnvelopeData(
   result: unknown,
   extras: Record<string, unknown>,
 ): Record<string, unknown> {
+  // Fail closed on missing hint. The type system requires RESPONSE_ENVELOPE_KEY
+  // to cover every CliExposedOperationId, so this should be unreachable. If it
+  // ever fires, it means the hint table drifted from the operation set and we
+  // would otherwise serialize the payload under the property name "undefined".
+  if (!Object.prototype.hasOwnProperty.call(RESPONSE_ENVELOPE_KEY, operationId)) {
+    throw new CliError(
+      'OPERATION_HINT_MISSING',
+      `Internal error: operation '${operationId}' has no RESPONSE_ENVELOPE_KEY entry. Add one in apps/cli/src/cli/operation-hints.ts.`,
+    );
+  }
   const envelopeKey = RESPONSE_ENVELOPE_KEY[operationId];
 
   if (envelopeKey === null) {

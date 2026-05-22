@@ -11,6 +11,7 @@ import { cliCommandTokens } from '../cli/operation-set.js';
 import { withActiveContext } from './context.js';
 import { openDocument, openSessionDocument, type EditorWithDoc } from './document.js';
 import { mapInvokeError } from './error-mapping.js';
+import { CliError } from './errors.js';
 import { formatOutput } from './output-formatters.js';
 import { syncCollaborativeSessionSnapshot } from './session-collab.js';
 import { PRE_INVOKE_HOOKS, POST_INVOKE_HOOKS } from './special-handlers.js';
@@ -67,6 +68,16 @@ function buildEnvelopeData(
   result: unknown,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
+  // Fail closed on missing hint. The type system requires RESPONSE_ENVELOPE_KEY
+  // to cover every CliExposedOperationId, so this should be unreachable. If it
+  // ever fires, it means the hint table drifted from the operation set and we
+  // would otherwise serialize the payload under the property name "undefined".
+  if (!Object.prototype.hasOwnProperty.call(RESPONSE_ENVELOPE_KEY, operationId)) {
+    throw new CliError(
+      'OPERATION_HINT_MISSING',
+      `Internal error: operation '${operationId}' has no RESPONSE_ENVELOPE_KEY entry. Add one in apps/cli/src/cli/operation-hints.ts.`,
+    );
+  }
   const envelopeKey = RESPONSE_ENVELOPE_KEY[operationId];
 
   const echoFields = ECHO_INPUT_FIELDS[operationId];
