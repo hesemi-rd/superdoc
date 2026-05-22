@@ -18,6 +18,10 @@ vi.mock('./revision-tracker.js', () => ({
   getRevision: vi.fn(() => 'rev-1'),
 }));
 
+vi.mock('../tracked-changes/tracked-change-index.js', () => ({
+  getTrackedChangeIndex: vi.fn(() => ({ getAll: () => [] })),
+}));
+
 vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: vi.fn(),
 }));
@@ -33,6 +37,7 @@ vi.mock('../helpers/adapter-utils.js', async () => {
 import { listCommentAnchors } from '../helpers/comment-target-resolver.js';
 import { resolveTextTarget } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { getTrackedChangeIndex } from '../tracked-changes/tracked-change-index.js';
 
 function makeAnchor(
   overrides: Partial<CommentAnchor> & { commentId: string; pos: number; end: number },
@@ -68,6 +73,11 @@ function mockTextBetweenSequence(editor: Editor, ...values: string[]): void {
   let i = 0;
   (editor.state!.doc as { textBetween: ReturnType<typeof vi.fn> }).textBetween = vi.fn(() => values[i++] ?? '');
 }
+
+beforeEach(() => {
+  vi.mocked(listCommentAnchors).mockReturnValue([]);
+  vi.mocked(getTrackedChangeIndex).mockReturnValue({ getAll: () => [] } as never);
+});
 
 describe('comments-wrappers: anchoredText', () => {
   beforeEach(() => {
@@ -174,6 +184,71 @@ describe('comments-wrappers: anchoredText', () => {
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list({ includeResolved: true });
     expect(result.items[0]!.anchoredText).toBe('resolved text');
+  });
+
+  it('projects live tracked changes as tracked-change comments', () => {
+    const editor = makeEditor([]);
+    vi.mocked(getTrackedChangeIndex).mockReturnValue({
+      getAll: () => [
+        {
+          address: { kind: 'entity', entityType: 'trackedChange', entityId: 'tc-live' },
+          runtimeRef: { storyKey: 'body', rawId: 'tc-live' },
+          story: { kind: 'story', storyType: 'body' },
+          type: 'insert',
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2026-05-22T04:00:00.000Z',
+          excerpt: 'live-review-comment',
+          storyLabel: 'Body',
+          storyKind: 'body',
+          anchorKey: 'tc::body::tc-live',
+          range: { from: 1, to: 20 },
+        },
+      ],
+    } as never);
+
+    const wrapper = createCommentsWrapper(editor);
+    const result = wrapper.list();
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        id: 'tc-live',
+        trackedChange: true,
+        trackedChangeType: 'insert',
+        trackedChangeText: 'live-review-comment',
+        trackedChangeAnchorKey: 'tc::body::tc-live',
+        creatorName: 'Alice',
+        creatorEmail: 'alice@example.com',
+      }),
+    );
+  });
+
+  it('does not add synthetic comments for imported Word tracked changes', () => {
+    const editor = makeEditor([]);
+    vi.mocked(getTrackedChangeIndex).mockReturnValue({
+      getAll: () => [
+        {
+          address: { kind: 'entity', entityType: 'trackedChange', entityId: 'tc-imported' },
+          runtimeRef: { storyKey: 'body', rawId: 'word:trackInsert:1' },
+          story: { kind: 'story', storyType: 'body' },
+          type: 'insert',
+          author: 'Alice',
+          date: '2026-05-22T04:00:00.000Z',
+          excerpt: 'imported',
+          wordRevisionIds: { insert: '1' },
+          storyLabel: 'Body',
+          storyKind: 'body',
+          anchorKey: 'tc::body::word:trackInsert:1',
+          range: { from: 1, to: 9 },
+        },
+      ],
+    } as never);
+
+    const wrapper = createCommentsWrapper(editor);
+    const result = wrapper.list();
+
+    expect(result.items).toHaveLength(0);
   });
 });
 

@@ -24,10 +24,12 @@ import type {
   ReplyToCommentInput,
   ResolveCommentInput,
   RevisionGuardOptions,
+  StoryLocator,
   SetCommentActiveInput,
   SetCommentInternalInput,
   TextSegment,
   TextTarget,
+  TrackChangeType,
 } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { TextSelection } from 'prosemirror-state';
@@ -50,6 +52,8 @@ import {
 } from '../helpers/comment-entity-store.js';
 import { listCommentAnchors, resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
 import { normalizeExcerpt, toNonEmptyString } from '../helpers/value-utils.js';
+import { getTrackedChangeIndex } from '../tracked-changes/tracked-change-index.js';
+import type { TrackedChangeSnapshot } from '../tracked-changes/tracked-change-snapshot.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -59,6 +63,15 @@ type EditorUserIdentity = {
   name?: string;
   email?: string;
   image?: string;
+};
+
+type TrackedChangeCommentInfo = CommentInfo & {
+  story?: StoryLocator;
+  trackedChange?: boolean;
+  trackedChangeType?: TrackChangeType;
+  trackedChangeAnchorKey?: string;
+  trackedChangeText?: string;
+  deletedText?: string | null;
 };
 
 function toCommentAddress(commentId: string): { kind: 'entity'; entityType: 'comment'; entityId: string } {
@@ -393,9 +406,83 @@ function mergeAnchorData(
   }
 }
 
-function buildCommentInfos(editor: Editor): CommentInfo[] {
+function parseCreatedTime(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function trackedChangeTextFields(
+  snapshot: TrackedChangeSnapshot,
+): Pick<TrackedChangeCommentInfo, 'trackedChangeText' | 'deletedText'> {
+  const excerpt = snapshot.excerpt ?? '';
+  if (snapshot.type === 'delete') {
+    return { trackedChangeText: '', deletedText: excerpt };
+  }
+  return { trackedChangeText: excerpt, deletedText: null };
+}
+
+function toTrackedChangeCommentInfo(snapshot: TrackedChangeSnapshot): TrackedChangeCommentInfo | null {
+  const commentId = toNonEmptyString(snapshot.address.entityId);
+  if (!commentId) return null;
+
+  const { trackedChangeText, deletedText } = trackedChangeTextFields(snapshot);
+
+  return {
+    address: toCommentAddress(commentId),
+    commentId,
+    text: trackedChangeText || deletedText || undefined,
+    status: 'open',
+    creatorName: snapshot.author,
+    creatorEmail: snapshot.authorEmail,
+    createdTime: parseCreatedTime(snapshot.date),
+    anchoredText: snapshot.excerpt,
+    story: snapshot.story,
+    trackedChange: true,
+    trackedChangeType: snapshot.type,
+    trackedChangeAnchorKey: snapshot.anchorKey,
+    trackedChangeText,
+    deletedText,
+  };
+}
+
+function mergeTrackedChangeCommentInfos(editor: Editor, infosById: Map<string, TrackedChangeCommentInfo>): void {
+  let trackedChanges: ReadonlyArray<TrackedChangeSnapshot>;
+  try {
+    trackedChanges = getTrackedChangeIndex(editor).getAll();
+  } catch {
+    return;
+  }
+
+  for (const snapshot of trackedChanges) {
+    const trackedChangeComment = toTrackedChangeCommentInfo(snapshot);
+    if (!trackedChangeComment) continue;
+
+    const existing = infosById.get(trackedChangeComment.commentId);
+    if (!existing) {
+      if (snapshot.wordRevisionIds) continue;
+      infosById.set(trackedChangeComment.commentId, trackedChangeComment);
+      continue;
+    }
+
+    Object.assign(existing, {
+      story: trackedChangeComment.story,
+      trackedChange: true,
+      trackedChangeType: trackedChangeComment.trackedChangeType,
+      trackedChangeAnchorKey: trackedChangeComment.trackedChangeAnchorKey,
+      trackedChangeText: trackedChangeComment.trackedChangeText,
+      deletedText: trackedChangeComment.deletedText,
+      anchoredText: existing.anchoredText ?? trackedChangeComment.anchoredText,
+      creatorName: existing.creatorName ?? trackedChangeComment.creatorName,
+      creatorEmail: existing.creatorEmail ?? trackedChangeComment.creatorEmail,
+      createdTime: existing.createdTime ?? trackedChangeComment.createdTime,
+    });
+  }
+}
+
+function buildCommentInfos(editor: Editor): TrackedChangeCommentInfo[] {
   const store = getCommentEntityStore(editor);
-  const infosById = new Map<string, CommentInfo>();
+  const infosById = new Map<string, TrackedChangeCommentInfo>();
 
   for (const entry of store) {
     const commentId = toNonEmptyString(entry.commentId) ?? toNonEmptyString(entry.importedId) ?? null;
@@ -404,6 +491,7 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
   }
 
   mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+  mergeTrackedChangeCommentInfos(editor, infosById);
 
   // Inherit target + anchoredText from nearest anchored ancestor for replies.
   // Walks up the parent chain so deep threads resolve regardless of iteration order.
@@ -1105,6 +1193,12 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       creatorName,
       creatorEmail,
       address,
+      story,
+      trackedChange,
+      trackedChangeType,
+      trackedChangeAnchorKey,
+      trackedChangeText,
+      deletedText,
     } = comment;
     return buildDiscoveryItem(comment.commentId, handle, {
       address,
@@ -1118,6 +1212,12 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       createdTime,
       creatorName,
       creatorEmail,
+      story,
+      trackedChange,
+      trackedChangeType,
+      trackedChangeAnchorKey,
+      trackedChangeText,
+      deletedText,
     });
   });
 
