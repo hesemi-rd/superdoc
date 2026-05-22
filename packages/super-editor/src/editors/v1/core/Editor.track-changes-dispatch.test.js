@@ -69,6 +69,31 @@ const setDocumentWithTrackedInsertion = (editor, { author = ALICE, id = FOREIGN_
   );
 };
 
+const setDocumentWithSeparateRunTrackedInsertion = (editor, { author = ALICE, id = FOREIGN_INSERT_ID } = {}) => {
+  const { schema } = editor;
+  const insertMark = schema.marks[TrackInsertMarkName].create({
+    id,
+    author: author.name,
+    authorEmail: author.email,
+    date: FIXED_DATE,
+  });
+  const doc = schema.nodes.doc.create(
+    {},
+    schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, schema.text('The quick brown fox jumps over the ')),
+      schema.nodes.run.create({}, schema.text('lazy ', [insertMark])),
+      schema.nodes.run.create({}, schema.text('dog.')),
+    ]),
+  );
+
+  editor.dispatch(
+    editor.state.tr
+      .replaceWith(0, editor.state.doc.content.size, doc.content)
+      .setMeta('skipTrackChanges', true)
+      .setMeta('inputType', 'test-setup'),
+  );
+};
+
 const deleteText = (editor, text) => {
   const { from, to } = findTextRange(editor, text);
   editor.dispatch(editor.state.tr.delete(from, to).setMeta('inputType', 'deleteContentBackward'));
@@ -77,6 +102,16 @@ const deleteText = (editor, text) => {
 const replaceText = (editor, text, replacement) => {
   const { from, to } = findTextRange(editor, text);
   editor.dispatch(editor.state.tr.insertText(replacement, from, to).setMeta('inputType', 'insertText'));
+};
+
+const getFirstMatchRef = (editor, pattern) => {
+  const match = editor.doc.query.match({
+    select: { type: 'text', pattern },
+    require: 'first',
+  });
+  const ref = match?.items?.[0]?.handle?.ref;
+  if (!ref) throw new Error(`Could not resolve ref for pattern "${pattern}"`);
+  return ref;
 };
 
 describe('Editor dispatch tracked-change meta', () => {
@@ -265,6 +300,45 @@ describe('Editor dispatch tracked-change meta', () => {
 
     const childInsertion = markEntries(editor, TrackInsertMarkName).find(
       ({ text, mark }) => text === 'yes' && mark.attrs?.id !== FOREIGN_INSERT_ID,
+    );
+    expect(childInsertion?.mark.attrs).toEqual(
+      expect.objectContaining({
+        authorEmail: BOB.email,
+        overlapParentId: FOREIGN_INSERT_ID,
+      }),
+    );
+  });
+
+  it('protects an imported-style separate-run tracked insertion from direct doc.replace', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithSeparateRunTrackedInsertion(editor);
+
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'lazy'),
+        text: 'quickly',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe('lazy ');
+
+    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === 'lazy');
+    expect(childDeletion?.mark.attrs).toEqual(
+      expect.objectContaining({
+        authorEmail: BOB.email,
+        overlapParentId: FOREIGN_INSERT_ID,
+      }),
+    );
+
+    const childInsertion = markEntries(editor, TrackInsertMarkName).find(
+      ({ text, mark }) => text === 'quickly' && mark.attrs?.id !== FOREIGN_INSERT_ID,
     );
     expect(childInsertion?.mark.attrs).toEqual(
       expect.objectContaining({

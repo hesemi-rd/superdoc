@@ -203,7 +203,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     const nextHasFormat = markType === TrackFormatMarkName;
     const wordRevisionId = toNonEmptyString(attrs.sourceId);
     const wordRevisionIdKey = getWordRevisionIdKey(markType);
-    const contributesToExcerpt = !hasChildTrackedMarkOnNode(item, id);
+    const contributesToExcerpt = !wordRevisionId || !hasChildTrackedMarkOnNode(item, id);
     const excerptText = contributesToExcerpt ? getTrackedMarkText(editor, item) : '';
 
     if (!existing) {

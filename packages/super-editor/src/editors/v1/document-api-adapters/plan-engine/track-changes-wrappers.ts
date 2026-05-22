@@ -57,6 +57,9 @@ function normalizeWordRevisionIds(
 }
 
 function snapshotToInfo(snapshot: TrackedChangeSnapshot): TrackChangeInfo {
+  const changedText = snapshot.excerpt
+    ? { [snapshot.type === 'delete' ? 'deletedText' : 'insertedText']: snapshot.excerpt }
+    : {};
   return {
     address: snapshot.address,
     id: snapshot.address.entityId,
@@ -67,6 +70,7 @@ function snapshotToInfo(snapshot: TrackedChangeSnapshot): TrackChangeInfo {
     authorImage: snapshot.authorImage,
     date: snapshot.date,
     excerpt: snapshot.excerpt,
+    ...(snapshot.type === 'format' ? {} : changedText),
   };
 }
 
@@ -144,7 +148,18 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
   const items = paged.items.map((snapshot) => {
     const info = snapshotToInfo(snapshot);
     const handle = buildResolvedHandle(snapshot.anchorKey, 'stable', 'trackedChange');
-    const { address, type, wordRevisionIds, author, authorEmail, authorImage, date, excerpt } = info;
+    const {
+      address,
+      type,
+      wordRevisionIds,
+      author,
+      authorEmail,
+      authorImage,
+      date,
+      excerpt,
+      insertedText,
+      deletedText,
+    } = info;
     return buildDiscoveryItem(info.id, handle, {
       address,
       type,
@@ -154,6 +169,8 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
       authorImage,
       date,
       excerpt,
+      insertedText,
+      deletedText,
     });
   });
 
@@ -186,6 +203,12 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
 
   if (snapshot) return snapshotToInfo(snapshot);
 
+  const type = resolveTrackedChangeType(resolved.change);
+  const excerpt =
+    (resolved.change.excerpt !== undefined ? resolved.change.excerpt : undefined) ??
+    normalizeExcerpt(resolved.editor.state.doc.textBetween(resolved.change.from, resolved.change.to, ' ', '\ufffc'));
+  const changedText = excerpt ? { [type === 'delete' ? 'deletedText' : 'insertedText']: excerpt } : {};
+
   return {
     address: {
       kind: 'entity',
@@ -194,15 +217,14 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
       ...(storyKey === BODY_STORY_KEY ? {} : { story: resolved.story }),
     },
     id: resolved.change.id,
-    type: resolveTrackedChangeType(resolved.change),
+    type,
     wordRevisionIds: normalizeWordRevisionIds(resolved.change.wordRevisionIds),
     author: toNonEmptyString(resolved.change.attrs.author),
     authorEmail: toNonEmptyString(resolved.change.attrs.authorEmail),
     authorImage: toNonEmptyString(resolved.change.attrs.authorImage),
     date: toNonEmptyString(resolved.change.attrs.date),
-    excerpt:
-      (resolved.change.excerpt !== undefined ? resolved.change.excerpt : undefined) ??
-      normalizeExcerpt(resolved.editor.state.doc.textBetween(resolved.change.from, resolved.change.to, ' ', '\ufffc')),
+    excerpt,
+    ...(type === 'format' ? {} : changedText),
   };
 }
 

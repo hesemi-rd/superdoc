@@ -189,6 +189,26 @@ describe('groupTrackedChanges', () => {
     expect(childChange?.excerpt).toBe('XYZ');
   });
 
+  it('keeps live parent insertion text when a child deletion overlaps it', () => {
+    const parent = makeTrackMark(TrackInsertMarkName, 'parent', { author: 'Live Author' });
+    const child = makeTrackMark(TrackDeleteMarkName, 'child', {
+      author: 'Second Author',
+      overlapParentId: 'parent',
+    });
+    const node = { text: 'review', marks: [parent.mark, child.mark] };
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...parent, node, from: 1, to: 7 },
+      { ...child, node, from: 1, to: 7 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    const parentChange = grouped.find((change) => change.rawId === 'parent');
+    const childChange = grouped.find((change) => change.rawId === 'child');
+
+    expect(parentChange?.excerpt).toBe('review');
+    expect(childChange?.excerpt).toBe('review');
+  });
+
   it('preserves significant Word revision whitespace in explicit excerpts', () => {
     const mark = makeTrackMark(TrackDeleteMarkName, 'delete-with-space', { sourceId: '4' });
     vi.mocked(getTrackChanges).mockReturnValue([

@@ -436,7 +436,7 @@ describe('overlap-compiler: text-replace produces paired replacement metadata', 
     expect(change.replacement?.deleted.length).toBeGreaterThan(0);
   });
 
-  it('links both sides of a child replacement to an other-user insertion parent', () => {
+  it('keeps both sides of a child replacement separately reviewable under an other-user insertion parent', () => {
     const parentId = 'ins-bob';
     const { state } = stateFromTrackedSpans({
       schema,
@@ -457,11 +457,15 @@ describe('overlap-compiler: text-replace produces paired replacement metadata', 
     const result = runCompile({ state, intent });
     expect(result.ok).toBe(true);
     const graph = buildReviewGraph({ state: { doc: result.tr.doc }, replacementsMode: 'paired' });
-    const child = Array.from(graph.changes.values()).find((change) => change.id !== parentId);
-    expect(child).toBeDefined();
-    expect(child.type).toBe(CanonicalChangeType.Replacement);
-    expect(child.replacement.inserted[0].attrs.overlapParentId).toBe(parentId);
-    expect(child.replacement.deleted[0].attrs.overlapParentId).toBe(parentId);
+    const children = Array.from(graph.changes.values()).filter((change) => change.parent === parentId);
+    expect(children).toHaveLength(2);
+    expect(children.map((change) => change.type).sort()).toEqual([
+      CanonicalChangeType.Deletion,
+      CanonicalChangeType.Insertion,
+    ]);
+    expect(
+      children.every((change) => change.segments.every((segment) => segment.attrs.overlapParentId === parentId)),
+    ).toBe(true);
   });
 
   it('honors a provided logical id hint for paired document-api replacements', () => {

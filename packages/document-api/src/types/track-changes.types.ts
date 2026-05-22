@@ -39,6 +39,10 @@ export interface TrackChangeInfo {
   authorImage?: string;
   date?: string;
   excerpt?: string;
+  /** Inserted content for insertion-style changes when available. */
+  insertedText?: string;
+  /** Deleted content for deletion-style changes when available. */
+  deletedText?: string;
 }
 
 export interface TrackChangesListQuery {
@@ -67,6 +71,10 @@ export interface TrackChangeDomain {
   authorImage?: string;
   date?: string;
   excerpt?: string;
+  /** Inserted content for insertion-style changes when available. */
+  insertedText?: string;
+  /** Deleted content for deletion-style changes when available. */
+  deletedText?: string;
 }
 
 /**

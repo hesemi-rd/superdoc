@@ -1512,6 +1512,8 @@ const trackChangeInfoSchema = objectSchema(
     authorImage: { type: 'string' },
     date: { type: 'string' },
     excerpt: { type: 'string' },
+    insertedText: { type: 'string' },
+    deletedText: { type: 'string' },
   },
   ['address', 'id', 'type'],
 );
@@ -1526,6 +1528,8 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
     authorImage: { type: 'string' },
     date: { type: 'string' },
     excerpt: { type: 'string' },
+    insertedText: { type: 'string' },
+    deletedText: { type: 'string' },
   },
   ['address', 'type'],
 );

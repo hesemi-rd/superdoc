@@ -1,5 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
-import { Transform } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
@@ -35,6 +35,7 @@ import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
 import { createWordIdAllocator, isDecimalWordId } from '@extensions/track-changes/review-model/word-id-allocator.js';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { getNecessaryMigrations } from '@core/migrations/index.js';
@@ -106,6 +107,121 @@ const CURRENT_APP_VERSION =
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+const isTrackedReviewMark = (mark: { type?: { name?: string } } | null | undefined): boolean =>
+  Boolean(mark?.type?.name && TRACKED_REVIEW_MARK_NAMES.has(mark.type.name));
+
+const trackedReviewMarkKey = (mark: { type?: { name?: string }; attrs?: Record<string, unknown> }): string | null => {
+  if (!isTrackedReviewMark(mark)) return null;
+  const id = typeof mark.attrs?.id === 'string' ? mark.attrs.id : '';
+  return `${mark.type?.name ?? ''}:${id}`;
+};
+
+const trackedReviewMarkKeysForNode = (node: PmNode | null | undefined): Set<string> => {
+  const keys = new Set<string>();
+  if (!node) return keys;
+  for (const mark of node.marks ?? []) {
+    const key = trackedReviewMarkKey(mark);
+    if (key) keys.add(key);
+  }
+  return keys;
+};
+
+const inlineNodeHasTrackedReviewMark = (node: PmNode): boolean =>
+  Boolean(node.isInline && node.marks?.some(isTrackedReviewMark));
+
+const rangeHasTrackedReviewMark = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let found = false;
+  doc.nodesBetween(clampedFrom, clampedTo, (node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const collapsedPositionIsInsideTrackedReviewMark = (doc: PmNode, pos: number): boolean => {
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  const beforeKeys = trackedReviewMarkKeysForNode($pos.nodeBefore);
+  if (!beforeKeys.size) return false;
+
+  const afterKeys = trackedReviewMarkKeysForNode($pos.nodeAfter);
+  for (const key of beforeKeys) {
+    if (afterKeys.has(key)) return true;
+  }
+  return false;
+};
+
+const fragmentHasTrackedReviewMark = (fragment: {
+  descendants?: (fn: (node: PmNode) => false | void) => void;
+}): boolean => {
+  let found = false;
+  fragment.descendants?.((node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const collapsedInsertionExtendsTrackedReviewMark = (
+  doc: PmNode,
+  pos: number,
+  slice: { content?: { descendants?: (fn: (node: PmNode) => false | void) => void } },
+): boolean => {
+  if (!slice.content || !fragmentHasTrackedReviewMark(slice.content)) return false;
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  return (
+    trackedReviewMarkKeysForNode($pos.nodeBefore).size > 0 || trackedReviewMarkKeysForNode($pos.nodeAfter).size > 0
+  );
+};
+
+const stepTouchesTrackedReviewState = (step: unknown, doc: PmNode): boolean => {
+  if (step instanceof ReplaceStep) {
+    if (rangeHasTrackedReviewMark(doc, step.from, step.to)) return true;
+    if (step.from === step.to && step.slice.content.size > 0) {
+      return (
+        collapsedPositionIsInsideTrackedReviewMark(doc, step.from) ||
+        collapsedInsertionExtendsTrackedReviewMark(doc, step.from, step.slice)
+      );
+    }
+    return false;
+  }
+
+  if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+    return rangeHasTrackedReviewMark(doc, step.from, step.to);
+  }
+
+  if (step instanceof ReplaceAroundStep) {
+    return (
+      rangeHasTrackedReviewMark(doc, step.from, step.to) || rangeHasTrackedReviewMark(doc, step.gapFrom, step.gapTo)
+    );
+  }
+
+  return false;
+};
+
+const transactionTouchesTrackedReviewState = (state: EditorState, tr: Transaction): boolean => {
+  if (!tr.docChanged || !tr.steps.length) return false;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  return tr.steps.some((step, index) => stepTouchesTrackedReviewState(step, docs[index] ?? state.doc));
+};
 
 type ExtensionInstanceLike = {
   type?: string;
@@ -2784,8 +2900,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
+      const protectsExistingTrackedReviewState = transactionTouchesTrackedReviewState(prevState, transactionToApply);
 
-      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      const shouldTrack =
+        ((isTrackChangesActive || forceTrackChanges) && !skipTrackChanges) || protectsExistingTrackedReviewState;
       if (shouldTrack && forceTrackChanges && !this.options.user) {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
       }

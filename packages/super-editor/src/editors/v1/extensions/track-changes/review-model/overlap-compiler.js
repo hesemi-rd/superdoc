@@ -664,12 +664,16 @@ const compileTextReplace = (ctx, intent) => {
     return applyInsert(ctx, intent.from, sanitizedSlice, insertMark, insertId, { create: true });
   }
 
+  const replacementParentId = getReplacementParentId(ctx, segments);
   // Paired vs independent: in paired mode share one id between insert+delete
-  // sides so the logical change projects as a `replacement` in the graph.
-  const sharedId = intent.replacements === 'paired' ? intent.replacementGroupHint || uuidv4() : null;
+  // sides so a top-level replacement projects as one logical graph change.
+  // A replacement nested inside another author's open review item must keep
+  // each side separately reviewable, so those child sides intentionally use
+  // distinct ids even when the caller's default replacement mode is paired.
+  const shouldPairReplacement = intent.replacements === 'paired' && !replacementParentId;
+  const sharedId = shouldPairReplacement ? intent.replacementGroupHint || uuidv4() : null;
   const replacementGroupId = sharedId ?? '';
   const replacementSideId = sharedId ? `${sharedId}#deleted` : '';
-  const replacementParentId = getReplacementParentId(ctx, segments);
 
   // Step 1 — tracked delete (collapses own insertions, marks live/other content).
   if (intent.from !== intent.to) {

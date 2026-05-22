@@ -60,6 +60,11 @@ import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
 import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
+import {
+  TrackDeleteMarkName,
+  TrackFormatMarkName,
+  TrackInsertMarkName,
+} from '../../extensions/track-changes/constants.js';
 
 // ---------------------------------------------------------------------------
 // Character-offset → document-position mapping
@@ -108,6 +113,7 @@ export function charOffsetToDocPos(
       const textStart = Math.max(pos, rangeFrom);
       const textEnd = Math.min(pos + node.nodeSize, rangeTo);
       const textLen = textEnd - textStart;
+      if (textLen <= 0) return false;
       if (count + textLen >= charOffset) {
         foundPos = textStart + (charOffset - count);
       }
@@ -176,6 +182,33 @@ type InlineWrapperSpec = {
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
+}
+
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+function hasTrackedReviewMark(marks: readonly ProseMirrorMark[] | undefined): boolean {
+  return Boolean(marks?.some((mark) => TRACKED_REVIEW_MARK_NAMES.has(mark.type.name)));
+}
+
+function rangeTouchesTrackedReviewState(doc: ProseMirrorNode, from: number, to: number): boolean {
+  let found = false;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (found) return false;
+
+    if (node.isText) {
+      const textStart = Math.max(from, pos);
+      const textEnd = Math.min(to, pos + node.nodeSize);
+      if (textStart >= textEnd) return false;
+    }
+
+    if ((node.isText || node.isInline) && hasTrackedReviewMark(node.marks as readonly ProseMirrorMark[] | undefined)) {
+      found = true;
+      return false;
+    }
+  });
+
+  return found;
 }
 
 function resolveMarksForRange(editor: Editor, target: CompiledRangeTarget, step: MutationStep): readonly unknown[] {
@@ -896,6 +929,16 @@ export function executeTextRewrite(
   const originalText = textBetweenWithTabs(tr.doc, absFrom, absTo, '', '');
   const origLen = originalText.length;
   const replLen = replacementText.length;
+
+  if (rangeTouchesTrackedReviewState(tr.doc, absFrom, absTo)) {
+    if (replacementText.length === 0) {
+      tr.delete(absFrom, absTo);
+      return { changed: target.text.length > 0 };
+    }
+    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks));
+    tr.replaceWith(absFrom, absTo, content);
+    return { changed: replacementText !== target.text };
+  }
 
   let prefix = 0;
   while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
