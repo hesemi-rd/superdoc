@@ -181,14 +181,46 @@ const _metaGetHandlesNull: null extends MetaGetReturn ? true : false = true;
 void _metaGetHandlesNull;
 
 // =========================================================================
-// 8. invoke<T> — dynamic dispatch keeps narrowing
+// 8. invoke<T> — typed dispatch narrows by operationId
 // =========================================================================
 
-// Typed overload narrows by operationId. The result type for
-// `find` must match the direct `doc.find(...)` return type.
-type FindViaInvoke = ReturnType<DocumentApi['invoke']>;
-const _invokeNotAny: Equal<FindViaInvoke, any> = false;
-void _invokeNotAny;
+// Concrete calls: the typed overload must narrow `invoke({ operationId,
+// ... })` to the same return type as a direct member call.
+// `ReturnType<DocumentApi['invoke']>` alone is not enough — TS resolves
+// `ReturnType` on overloads to the LAST overload's return (here
+// `unknown` from the dynamic-dispatch signature), so a regression that
+// removed the typed overload would still leave that assertion passing.
+// The concrete-call equality checks below actually exercise the typed
+// overload; if it disappears, these fail.
+//
+// `operationId` is held as the literal (not widened to `string`) so the
+// generic infers `T extends OperationId` correctly.
+//
+// Both branches of `InvokeRequest<T>` are covered: operations with no
+// options (`find`, registry `options: never`) and operations with
+// options (`insert`, registry `options: MutationOptions`). A regression
+// in either branch — e.g. reintroducing the `Record<string, never>`
+// intersection that previously made the no-options branch unmatchable —
+// will fail one of these equality checks.
+
+// No-options branch: `find`.
+declare const findInvokeRequest: {
+  operationId: 'find';
+  input: Parameters<DocumentApi['find']>[0];
+};
+const invokeFindResult = doc.invoke(findInvokeRequest);
+const _invokeFindNarrows: Equal<typeof invokeFindResult, ReturnType<DocumentApi['find']>> = true;
+void _invokeFindNarrows;
+
+// With-options branch: `insert`.
+declare const insertInvokeRequest: {
+  operationId: 'insert';
+  input: Parameters<DocumentApi['insert']>[0];
+  options: NonNullable<Parameters<DocumentApi['insert']>[1]>;
+};
+const invokeInsertResult = doc.invoke(insertInvokeRequest);
+const _invokeInsertNarrows: Equal<typeof invokeInsertResult, ReturnType<DocumentApi['insert']>> = true;
+void _invokeInsertNarrows;
 
 // =========================================================================
 // Negative assertions — bad inputs must be rejected
