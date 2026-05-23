@@ -146,12 +146,10 @@ function isTextTargetShape(target: unknown): target is TextTarget {
 }
 
 /**
- * Normalize a TextAddress | TextTarget comment target into an array of
+ * Normalize the text-addressable comment target shapes into an array of
  * segments. For TextAddress, the result is a single-entry array.
  */
-function targetToSegments(
-  target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
-): TextSegment[] | null {
+function targetToSegments(target: CommentTarget): TextSegment[] | null {
   if (isTextAddressShape(target)) return [{ blockId: target.blockId, range: target.range }];
   if (isTextTargetShape(target)) return [...target.segments];
   return null;
@@ -1096,7 +1094,7 @@ function addCommentHandler(
     }
     throw error;
   }
-  if (!resolvedTarget.ok) {
+  if (resolvedTarget.ok === false) {
     return { success: false, failure: resolvedTarget.failure };
   }
 
@@ -1289,7 +1287,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: R
   const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.patch (moveComment)');
 
   const resolvedTarget = resolveCommentTarget(editor, input.target);
-  if (!resolvedTarget.ok) {
+  if (resolvedTarget.ok === false) {
     return { success: false, failure: resolvedTarget.failure };
   }
 

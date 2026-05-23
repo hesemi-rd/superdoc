@@ -152,6 +152,7 @@
     "apps/docs/document-api/reference/footnotes/remove.mdx",
     "apps/docs/document-api/reference/footnotes/update.mdx",
     "apps/docs/document-api/reference/format/apply.mdx",
+    "apps/docs/document-api/reference/format/apply.mdx",
     "apps/docs/document-api/reference/format/b-cs.mdx",
     "apps/docs/document-api/reference/format/bold.mdx",
     "apps/docs/document-api/reference/format/border.mdx",
@@ -524,6 +525,7 @@
       "aliasMemberPaths": ["format.strikethrough"],
       "key": "format",
       "operationIds": [
+        "formatRange",
         "format.apply",
         "format.bold",
         "format.italic",
@@ -1077,5 +1079,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "b2a628b73f6cb983a78e8068179f0c18cc99024112b143c1a832b95b4c2ad914"
+  "sourceHash": "cecf48b9ef043255c73faeed6b35f236bca0cd969d19779a21952f9c15037705"
 }

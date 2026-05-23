@@ -954,6 +954,23 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'edit',
     intentAction: 'delete',
   },
+  formatRange: {
+    memberPath: 'formatRange',
+    description:
+      'Legacy root-level alias for inline range formatting. Routes to `format.apply` for compatibility with older callers.',
+    expectedResult: 'Returns a TextMutationReceipt confirming inline styles were applied to the target range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
+    }),
+    referenceDocPath: 'format/apply.mdx',
+    referenceGroup: 'format',
+    skipAsATool: true,
+  },
 
   'blocks.list': {
     memberPath: 'blocks.list',

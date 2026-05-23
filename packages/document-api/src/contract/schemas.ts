@@ -3272,6 +3272,34 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
+  formatRange: {
+    input: {
+      ...targetLocatorWithPayload(
+        {
+          in: storyLocatorSchema,
+          properties: {
+            ...buildInlineRunPatchSchema(),
+            description:
+              'Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.',
+          },
+          changeMode: {
+            enum: ['direct', 'tracked'],
+            description: "Edit mode: 'direct' applies changes immediately, 'tracked' records tracked formatting.",
+          },
+          dryRun: { type: 'boolean', description: 'Preview the result without mutating the document.' },
+          expectedRevision: {
+            type: 'string',
+            description:
+              'Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.',
+          },
+        },
+        ['properties'],
+      ),
+    },
+    output: textMutationResultSchemaFor('formatRange'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('formatRange'),
+  },
   'format.apply': {
     input: {
       ...targetLocatorWithPayload(
