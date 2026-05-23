@@ -635,6 +635,41 @@ describe('SuperDoc core', () => {
     expect(instance.ydoc).toBeDefined();
   });
 
+  it('uses a separate SuperDoc ydoc when internal/external comments sync is enabled', async () => {
+    createAppHarness();
+    const superdocYdoc = { destroy: vi.fn() };
+    const superdocProvider = { disconnect: vi.fn(), destroy: vi.fn(), on: vi.fn(), off: vi.fn() };
+    initSuperdocYdocMock.mockImplementationOnce(() => ({
+      ydoc: superdocYdoc,
+      provider: superdocProvider,
+    }));
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      superdocId: 'superdoc-room',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: { useInternalExternalComments: true, suppressInternalExternalComments: false },
+        toolbar: {},
+        collaboration: {
+          providerType: 'hocuspocus',
+          url: 'wss://example.com',
+        },
+      },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(MockHocuspocusProviderWebsocket.instances).toHaveLength(1);
+    expect(instance.config.socket).toBe(MockHocuspocusProviderWebsocket.instances[0]);
+    expect(initSuperdocYdocMock).toHaveBeenCalledWith(instance);
+    expect(instance.ydoc).toBe(superdocYdoc);
+    expect(instance.provider).toBe(superdocProvider);
+  });
+
   // pagination legacy removed; togglePagination test removed
 
   it('broadcasts ready only when all editors resolved', async () => {
@@ -1293,6 +1328,36 @@ describe('SuperDoc core', () => {
     instance.setDocumentMode('editing');
     expect(restoreComments).toHaveBeenCalledTimes(1);
     expect(setDocumentMode).toHaveBeenLastCalledWith('editing');
+  });
+
+  it('falls back to viewing mode when suggesting is requested without a role', async () => {
+    const { superdocStore } = createAppHarness();
+    const removeComments = vi.fn();
+    const setDocumentMode = vi.fn();
+    const docStub = {
+      removeComments,
+      restoreComments: vi.fn(),
+      getEditor: vi.fn(() => ({ setDocumentMode })),
+      getPresentationEditor: vi.fn(() => null),
+    };
+    superdocStore.documents = [docStub];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: undefined,
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.setDocumentMode('suggesting');
+
+    expect(removeComments).toHaveBeenCalledTimes(1);
+    expect(setDocumentMode).toHaveBeenLastCalledWith('viewing');
   });
 
   it('updates viewing comment options for presentation editors', async () => {
