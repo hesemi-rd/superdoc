@@ -1,4 +1,10 @@
-type IdentityLike = Readonly<Record<string, unknown>> | null | undefined;
+type IdentityFields = Readonly<{
+  id?: unknown;
+  email?: unknown;
+  name?: unknown;
+}>;
+
+type IdentityLike = IdentityFields | Readonly<Record<string, unknown>> | null | undefined;
 
 export interface NormalizedActorIdentity {
   readonly id: string;
@@ -37,7 +43,7 @@ export const normalizeActorName = (value: unknown): string => {
 };
 
 export const getActorIdentity = (value: IdentityLike): NormalizedActorIdentity => {
-  const record = (value ?? {}) as Record<string, unknown>;
+  const record = value ?? {};
   const id = normalizeActorId(record.id);
   const email = normalizeActorEmail(record.email);
   const name = typeof record.name === 'string' ? record.name : '';
