@@ -101,6 +101,7 @@ import { getLiveInlineMarksInRange } from '../trackChangesHelpers/getLiveInlineM
  */
 
 const SUPPORTED_KINDS = new Set(['text-insert', 'text-delete', 'text-replace', 'format-apply', 'format-remove']);
+const EMPTY_STRUCTURAL_GAP_REFINEMENT_MAX_DISTANCE = 4;
 
 /**
  * Compile a tracked edit against an accumulated transaction.
@@ -243,6 +244,49 @@ const findSegmentAt = (ctx, pos) => {
   return null;
 };
 
+const findSegmentAcrossEmptyStructuralGap = (ctx, pos) => {
+  let nearest = null;
+  for (const segment of ctx.graph.segments) {
+    if (segment.to >= pos) continue;
+    const distance = pos - segment.to;
+    if (distance > EMPTY_STRUCTURAL_GAP_REFINEMENT_MAX_DISTANCE) continue;
+    if (!isEmptyStructuralGap(ctx, segment.to, pos)) continue;
+    if (!nearest || segment.to > nearest.to) nearest = segment;
+  }
+  return nearest;
+};
+
+const isEmptyStructuralGap = (ctx, from, to) => {
+  if (to <= from) return false;
+  if (!sharesTextblock(ctx.tr.doc, from, to)) return false;
+  if (ctx.graph.segmentsInRange(from, to).length) return false;
+  if (ctx.tr.doc.textBetween(from, to, '', '')) return false;
+
+  let hasInlineLeaf = false;
+  ctx.tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (pos < from || pos >= to) return;
+    if (node.isInline && node.isLeaf) {
+      hasInlineLeaf = true;
+      return false;
+    }
+  });
+  return !hasInlineLeaf;
+};
+
+const sharesTextblock = (doc, from, to) => {
+  const left = textblockStart(doc, from);
+  const right = textblockStart(doc, to);
+  return left !== null && left === right;
+};
+
+const textblockStart = (doc, pos) => {
+  const resolved = doc.resolve(Math.max(0, Math.min(doc.content.size, pos)));
+  for (let depth = resolved.depth; depth > 0; depth -= 1) {
+    if (resolved.node(depth).isTextblock) return resolved.start(depth);
+  }
+  return null;
+};
+
 const segmentsInRange = (ctx, from, to) => ctx.graph.segmentsInRange(from, to);
 
 const insertSchema = (ctx) => ctx.schema.marks[TrackInsertMarkName];
@@ -350,9 +394,11 @@ const compileTextInsert = (ctx, intent) => {
   const overlapParent = containing && containing.from < at && containing.to > at ? containing : null;
   const boundaryAdjacent =
     !overlapParent && containing && (containing.to === at || containing.from === at) ? containing : null;
+  const emptyGapAdjacent = !overlapParent && !boundaryAdjacent ? findSegmentAcrossEmptyStructuralGap(ctx, at) : null;
 
   // Same-user refinement targets: own insertion that strictly contains `at`,
-  // OR an own-insertion edge we are adjacent to. Refinement uses the
+  // an own-insertion edge we are adjacent to, OR the same edge separated only
+  // by run-wrapper position gaps. Refinement uses the
   // permissive `isSameUserForRefinement` check so contiguous typing by the
   // default unidentified user (no email) still coalesces into one id —
   // matching the legacy `findTrackedMarkBetween({ authorEmail: '' })`
@@ -365,7 +411,11 @@ const compileTextInsert = (ctx, intent) => {
           boundaryAdjacent.side === SegmentSide.Inserted &&
           isSameUserForRefinement(ctx, boundaryAdjacent)
         ? boundaryAdjacent
-        : null;
+        : emptyGapAdjacent &&
+            emptyGapAdjacent.side === SegmentSide.Inserted &&
+            isSameUserForRefinement(ctx, emptyGapAdjacent)
+          ? emptyGapAdjacent
+          : null;
 
   if (refinementTarget) {
     const refinedId = refinementTarget.changeId;

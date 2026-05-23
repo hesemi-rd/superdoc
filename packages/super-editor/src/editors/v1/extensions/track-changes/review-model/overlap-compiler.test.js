@@ -27,6 +27,30 @@ const SAME_EMAIL_BOB = { id: 'bob-id', name: 'Bob', email: 'shared@example.com' 
 const FIXED_DATE = '2026-05-21T00:00:00.000Z';
 
 const schema = createReviewGraphTestSchema();
+const createReviewGraphRunTestSchema = () => {
+  const baseSchema = createReviewGraphTestSchema();
+  return new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: {
+        content: 'inline*',
+        group: 'block',
+        parseDOM: [{ tag: 'p' }],
+        toDOM: () => ['p', 0],
+      },
+      run: {
+        content: 'text*',
+        group: 'inline',
+        inline: true,
+        selectable: false,
+        parseDOM: [{ tag: 'span[data-run]' }],
+        toDOM: () => ['span', { 'data-run': '1' }, 0],
+      },
+      text: { group: 'inline' },
+    },
+    marks: baseSchema.spec.marks.toObject(),
+  });
+};
 
 const insertMark = (attrs) => ({ markType: TrackInsertMarkName, attrs: markAttrs(attrs) });
 const deleteMark = (attrs) => ({ markType: TrackDeleteMarkName, attrs: markAttrs(attrs) });
@@ -143,6 +167,78 @@ describe('overlap-compiler: same-user own-insertion refinement (SD-486-adjacent 
     const graph = buildReviewGraph({ state: { doc: result.tr.doc } });
     expect(graph.changes.size).toBe(1);
     expect(graph.changes.get(id)).toBeDefined();
+  });
+
+  it('refines own insertion across an empty run-wrapper position gap', () => {
+    const runSchema = createReviewGraphRunTestSchema();
+    const id = 'ins-alice';
+    const mark = runSchema.marks[TrackInsertMarkName].create(
+      markAttrs({ id, authorEmail: ALICE.email, date: FIXED_DATE }),
+    );
+    const run = runSchema.nodes.run.create({}, [runSchema.text('a', [mark])]);
+    const doc = runSchema.nodes.doc.create({}, [runSchema.nodes.paragraph.create({}, [run])]);
+    const state = EditorState.create({ schema: runSchema, doc });
+
+    let trackedTextEnd = null;
+    let runEnd = null;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'a') trackedTextEnd = pos + node.nodeSize;
+      if (node.type.name === 'run') runEnd = pos + node.nodeSize;
+    });
+    expect(runEnd).toBeGreaterThan(trackedTextEnd);
+
+    const intent = makeTextInsertIntent({
+      at: runEnd,
+      content: sliceFromText(runSchema, 'b'),
+      user: ALICE,
+      date: FIXED_DATE,
+      source: 'native',
+    });
+    const result = runCompile({ state, intent });
+    expect(result.ok).toBe(true);
+    expect(result.createdChangeIds).toHaveLength(0);
+    expect(result.updatedChangeIds).toContain(id);
+
+    const graph = buildReviewGraph({ state: { doc: result.tr.doc } });
+    expect(graph.changes.size).toBe(1);
+    expect(
+      graph.changes
+        .get(id)
+        ?.insertedSegments.map((segment) => segment.text)
+        .join(''),
+    ).toBe('ab');
+  });
+
+  it('does not refine own insertion across live text', () => {
+    const runSchema = createReviewGraphRunTestSchema();
+    const id = 'ins-alice';
+    const mark = runSchema.marks[TrackInsertMarkName].create(
+      markAttrs({ id, authorEmail: ALICE.email, date: FIXED_DATE }),
+    );
+    const run = runSchema.nodes.run.create({}, [runSchema.text('a', [mark])]);
+    const liveText = runSchema.text('x');
+    const doc = runSchema.nodes.doc.create({}, [runSchema.nodes.paragraph.create({}, [run, liveText])]);
+    const state = EditorState.create({ schema: runSchema, doc });
+
+    let liveTextEnd = null;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.text === 'x') liveTextEnd = pos + node.nodeSize;
+    });
+
+    const intent = makeTextInsertIntent({
+      at: liveTextEnd,
+      content: sliceFromText(runSchema, 'b'),
+      user: ALICE,
+      date: FIXED_DATE,
+      source: 'native',
+    });
+    const result = runCompile({ state, intent });
+    expect(result.ok).toBe(true);
+    expect(result.createdChangeIds).toHaveLength(1);
+    expect(result.updatedChangeIds).not.toContain(id);
+
+    const graph = buildReviewGraph({ state: { doc: result.tr.doc } });
+    expect(graph.changes.size).toBe(2);
   });
 
   it('replaces inside own insertion while preserving the existing insertion id', () => {
