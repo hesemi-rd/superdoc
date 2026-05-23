@@ -21,9 +21,9 @@
 import type {
   Config,
   Editor,
+  SuperDocExceptionEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
-  SuperDocExceptionEditorPayload,
 } from 'superdoc';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -95,6 +95,14 @@ const onException: NonNullable<Config['onException']> = (params) => {
   if ('code' in params) {
     const editorParams: SuperDocExceptionEditorPayload = params;
     void editorParams.code;
+    // The editor field allows `null` (password-prompt re-emit forwards
+    // `originalException?.editor ?? null`). Consumers must accept null
+    // alongside undefined; assigning to `Editor` alone must fail.
+    const editorField: Editor | null | undefined = editorParams.editor;
+    void editorField;
+    // @ts-expect-error SD-673 Phase 4D: editor can be null, not just `Editor | undefined`.
+    const tooNarrow: Editor | undefined = editorParams.editor;
+    void tooNarrow;
     return;
   }
   // Residual: TS can't fully eliminate the editor shape here because
