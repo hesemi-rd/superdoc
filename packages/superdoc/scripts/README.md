@@ -54,7 +54,7 @@ but have separate script chains because the validation needs differ.
 | `check:public` | `check:public:superdoc` + `check:public:docapi` | Both public interfaces. The umbrella to run before merging. |
 | `check:public:superdoc` | `check:public-contract` (legacy alias) | SuperDoc package: vite build + postbuild chain, consumer typecheck matrix, deep-type audit. |
 | `check:public:docapi` | `docapi:check` (legacy alias) | Document API: contract parity, generated outputs are not stale, examples compile, overview alignment. Clean-checkout safe: gitignored outputs (`packages/document-api/generated/`) are built in memory; tracked outputs (`apps/docs/document-api/reference/`, overview block) are still compared byte-for-byte. |
-| `report:public:superdoc` | `report:public-contract` (legacy alias) | Read-only tier metadata (supported / legacy / asset / deprecated). Not a gate. |
+| `report:public:superdoc` | `report:public-contract` (legacy alias) | Read-only tier metadata (supported / legacy / legacy-raw / asset / deprecated). Not a gate. |
 
 ### TypeScript compiler
 
@@ -105,6 +105,29 @@ it stopped running.
 | `report-declaration-reachability.cjs` | postbuild | Instrumentation (not a gate): per-bucket reachability ratio of emitted declarations. | Loses visibility into unreachable emit (the SD-2952 trim target). |
 | `check-jsdoc.cjs` | CI step | Per-file checkJs gate for files in a hand-curated `CHECKED_FILES` allowlist. Currently 6 files. **Note**: `SuperDoc.js` now has `// @ts-check` but is gated by `check:types`, not this script. The 6-file list is a historical ratchet from before the broader enablement; consolidating with `check:types` is tracked separately. | A targeted regression on one of the 6 ratcheted files ships silently. |
 
+The repo also has a top-level tier-discipline gate. One script,
+`scripts/report-public-contract.mjs`, with two modes:
+
+- default (read-only report) - what `pnpm report:public:superdoc` runs.
+  Prints the tiers + a validator status block. Exit 0 always.
+- `--check` (gate) - runs as stage 2 of `check:public:superdoc` after
+  the validator's unit tests. Fails the build on any invariant
+  violation.
+
+Both modes share the pure `validatePublicContract` exported from the
+same file (unit-tested in `scripts/report-public-contract.test.mjs`).
+
+Invariants enforced in `--check` mode against the `publicContract`
+taxonomy in `type-surface.config.cjs`:
+
+- every `package.json#exports` subpath has a tier entry
+- every tier entry exists in `package.json#exports`
+- no subpath appears in more than one tier
+- each entry's `tier` field matches its bucket
+- `supported` subpaths route through `dist/superdoc/src/public/**` (excluding the `legacy/` subtree)
+- `legacy` subpaths route through `dist/superdoc/src/public/legacy/**`
+- `legacyRaw` is restricted to the explicitly accepted set (currently only `./super-editor`)
+
 ---
 
 ## Consumer-typecheck infrastructure (`tests/consumer-typecheck/`)
@@ -121,7 +144,8 @@ what an actual consumer would see — not the workspace source.
 | `package-shape-gate.mjs` | External package-shape linters (publint + attw) against the packed tarball. | Catches condition ordering, masquerading exports, missing field declarations. |
 | `check-root-classification-closure.mjs` | Asserts no `supported-root` or `legacy-root` export references an `internal-candidate` symbol in its public declared type. | Closure rule from SD-3212. |
 
-`check:public:superdoc` runs all six in order. `typecheck-matrix` packs
+`check:public:superdoc` runs all six in order (after the cheap
+tier-discipline stage at the top of the wrapper). `typecheck-matrix` packs
 `superdoc.tgz` and installs it into the consumer fixture. The rest
 reuse what matrix produced: `deep-type-audit`, `snapshot --all
 --check`, and `check-root-classification-closure` read from the
