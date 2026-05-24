@@ -5,6 +5,7 @@ import type { StoryLocator } from './story.types.js';
 export type TrackChangeType = 'insert' | 'delete' | 'replacement' | 'format';
 export type TrackChangeOverlapRelationship = 'parent' | 'child' | 'standalone';
 export type TrackChangeGrouping = 'standalone' | 'replacement-pair' | 'unknown';
+export type TrackChangeProvenanceOrigin = 'word' | 'google-docs' | 'superdoc' | 'custom' | 'unknown';
 
 export interface TrackChangeOverlapLayer {
   id: string;
@@ -61,6 +62,10 @@ export interface TrackChangeInfo {
   insertedText?: string;
   /** Deleted content for deletion-style changes when available. */
   deletedText?: string;
+  /** Source application or package family detected on import. */
+  origin?: TrackChangeProvenanceOrigin;
+  /** True when this tracked change came from an imported document revision. */
+  imported?: boolean;
 }
 
 export interface TrackChangesListQuery {
@@ -97,6 +102,10 @@ export interface TrackChangeDomain {
   insertedText?: string;
   /** Deleted content for deletion-style changes when available. */
   deletedText?: string;
+  /** Source application or package family detected on import. */
+  origin?: TrackChangeProvenanceOrigin;
+  /** True when this tracked change came from an imported document revision. */
+  imported?: boolean;
 }
 
 /**

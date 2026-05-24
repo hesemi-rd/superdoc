@@ -73,7 +73,7 @@ const isFiniteNonNeg = (value) => typeof value === 'number' && Number.isFinite(v
  *
  * @param {*} schema
  * @param {string} text
- * @param {Array<import('prosemirror-model').Mark>} [marks]
+ * @param {readonly import('prosemirror-model').Mark[]} [marks]
  * @returns {import('prosemirror-model').Slice}
  */
 export const sliceFromText = (schema, text, marks) => {

@@ -27,6 +27,7 @@ type PreInvokeHook = (input: unknown, context: HookContext) => unknown;
 type PostInvokeHook = (result: unknown, context: HookContext) => unknown;
 
 const FORMAT_RECEIPT_OPERATION_IDS: readonly CliExposedOperationId[] = [
+  'formatRange',
   'format.apply',
   ...INLINE_PROPERTY_REGISTRY.map((entry) => `format.${entry.key}` as CliExposedOperationId),
 ];
@@ -212,6 +213,31 @@ const resolveReviewDecideId: PreInvokeHook = (input, context) => {
   return { ...record, target: { ...target, id: rawId } };
 };
 
+/**
+ * Comment target shapes can carry trackedChangeId values copied from
+ * `trackChanges.list`, which the CLI normalizes to stable SHA-1 IDs. The
+ * adapter expects raw/runtime ids, so translate the target id before invoke.
+ */
+const resolveCommentTrackedChangeTargetId: PreInvokeHook = (input, context) => {
+  const record = asRecord(input);
+  if (!record) return input;
+
+  const target = asRecord(record.target);
+  if (!target) return input;
+
+  const stableId = typeof target.trackedChangeId === 'string' ? target.trackedChangeId : undefined;
+  if (!stableId) return input;
+
+  const listResult = context.editor.doc.invoke({
+    operationId: 'trackChanges.list' as const,
+    input: {},
+  });
+  const { stableToRawId } = buildStableIdMappings(listResult);
+  const rawId = stableToRawId.get(stableId) ?? stableId;
+
+  return { ...record, target: { ...target, trackedChangeId: rawId } };
+};
+
 // ---------------------------------------------------------------------------
 // Post-invoke hooks
 // ---------------------------------------------------------------------------
@@ -283,6 +309,9 @@ export const PRE_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PreInvokeHo
   'trackChanges.get': resolveTrackChangeId,
   // trackChanges.decide needs stable-ID → raw-ID translation on target.id
   'trackChanges.decide': resolveReviewDecideId,
+  // comments target trackedChangeId can be copied from stable list output
+  'comments.create': resolveCommentTrackedChangeTargetId,
+  'comments.patch': resolveCommentTrackedChangeTargetId,
 };
 
 /** Post-invoke: transform the raw invoke() result before envelope wrapping. */

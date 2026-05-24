@@ -16,6 +16,26 @@ import {
 import { decideTrackedChanges, buildDecisionBubbleEvents } from './review-model/decision-engine.js';
 
 /**
+ * @typedef {{ code: string, message: string, details?: unknown }} TrackChangesFailure
+ * @typedef {{
+ *   lastCompilerFailure: TrackChangesFailure | null,
+ *   lastDecisionFailure: TrackChangesFailure | null,
+ *   lastDecisionReceipt: unknown,
+ * }} TrackChangesStorage
+ */
+
+/**
+ * @param {unknown} editor
+ * @returns {TrackChangesStorage | null}
+ */
+const getTrackChangesStorage = (editor) => {
+  const storage = /** @type {{ storage?: { trackChanges?: unknown } } | null | undefined} */ (editor)?.storage
+    ?.trackChanges;
+  if (!storage || typeof storage !== 'object') return null;
+  return /** @type {TrackChangesStorage} */ (storage);
+};
+
+/**
  * Reads the `replacements` mode from editor.options.trackedChanges.
  * Defaults to `'paired'` when unset; anything other than the exact
  * `'independent'` string is treated as paired to be defensive.
@@ -28,8 +48,10 @@ const readReplacementsMode = (editor) =>
  * emits bubble lifecycle events from the decision receipt.
  */
 const dispatchReviewDecision = ({ editor, state, dispatch, decision, target }) => {
-  if (editor?.storage?.trackChanges) {
-    editor.storage.trackChanges.lastDecisionFailure = null;
+  const trackChangesStorage = getTrackChangesStorage(editor);
+  if (trackChangesStorage) {
+    trackChangesStorage.lastDecisionFailure = null;
+    trackChangesStorage.lastDecisionReceipt = null;
   }
   const result = decideTrackedChanges({
     state,
@@ -38,18 +60,21 @@ const dispatchReviewDecision = ({ editor, state, dispatch, decision, target }) =
     target,
     replacements: readReplacementsMode(editor),
   });
-  if (!result.ok) {
+  if (result.ok === false) {
     // Fail closed (do NOT mutate) for hard errors. NO_OP and
     // CAPABILITY_UNAVAILABLE return `false` so toolbar wrappers can decide
     // how to surface the result.
-    if (editor?.storage?.trackChanges) {
-      editor.storage.trackChanges.lastDecisionFailure = {
+    if (trackChangesStorage) {
+      trackChangesStorage.lastDecisionFailure = {
         code: result.code,
         message: result.message,
         details: result.details,
       };
     }
     return { applied: false, failure: result };
+  }
+  if (trackChangesStorage) {
+    trackChangesStorage.lastDecisionReceipt = result.receipt ?? null;
   }
   if (dispatch) {
     // Compute the post-dispatch state locally so we can derive update events
@@ -124,7 +149,7 @@ const dispatchReviewDecision = ({ editor, state, dispatch, decision, target }) =
  * (mark.attrs.splitFromId === originalId).
  *
  * @param {{ state: import('prosemirror-state').EditorState, originalId: string }} options
- * @returns {Array<{ from: number, to: number, mark: import('prosemirror-model').Mark, node: import('prosemirror-model').Node }>}
+ * @returns {import('./trackChangesHelpers/types.js').TrackedMarkRange[]}
  */
 const collectRemainingForLogicalId = ({ state, originalId }) => {
   const all = getTrackChanges(state);
@@ -224,6 +249,7 @@ export const TrackChanges = Extension.create({
     return {
       lastCompilerFailure: null,
       lastDecisionFailure: null,
+      lastDecisionReceipt: null,
     };
   },
 
@@ -285,7 +311,7 @@ export const TrackChanges = Extension.create({
         },
 
       acceptTrackedChangeFromContextMenu:
-        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ from = null, to = null, trackedChangeId = null } = {}) =>
         ({ state, commands, editor }) => {
           return resolveTrackedChangeAction({
             action: 'accept',
@@ -372,7 +398,7 @@ export const TrackChanges = Extension.create({
         },
 
       rejectTrackedChangeFromContextMenu:
-        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ from = null, to = null, trackedChangeId = null } = {}) =>
         ({ state, commands, editor }) => {
           return resolveTrackedChangeAction({
             action: 'reject',
@@ -726,8 +752,9 @@ const dispatchCompiledInsertTrackedChange = ({
   const replacements = readReplacementsMode(editor);
   const tr = state.tr;
   const schema = state.schema;
-  if (editor?.storage?.trackChanges) {
-    editor.storage.trackChanges.lastCompilerFailure = null;
+  const trackChangesStorage = getTrackChangesStorage(editor);
+  if (trackChangesStorage) {
+    trackChangesStorage.lastCompilerFailure = null;
   }
   const activeMarks = state.storedMarks ?? state.doc.resolve(from).marks();
   let intent;
@@ -776,9 +803,9 @@ const dispatchCompiledInsertTrackedChange = ({
     replacements,
   });
 
-  if (!result.ok) {
-    if (editor?.storage?.trackChanges) {
-      editor.storage.trackChanges.lastCompilerFailure = {
+  if (result.ok === false) {
+    if (trackChangesStorage) {
+      trackChangesStorage.lastCompilerFailure = {
         code: result.code,
         message: result.message,
         details: result.details,

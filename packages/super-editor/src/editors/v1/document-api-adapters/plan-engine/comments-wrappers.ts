@@ -53,6 +53,7 @@ import {
   getCommentEntityStore,
   isCommentResolved,
   removeCommentEntityTree,
+  restoreStashedCommentEntityTree,
   toCommentInfo,
   upsertCommentEntity,
 } from '../helpers/comment-entity-store.js';
@@ -631,6 +632,12 @@ function mergeTrackedChangeCommentInfos(editor: Editor, infosById: Map<string, T
 }
 
 function buildCommentInfos(editor: Editor): TrackedChangeCommentInfo[] {
+  const anchors = listCommentAnchorsSafe(editor);
+  const anchoredCommentIds = Array.from(new Set(anchors.map((anchor) => anchor.commentId)));
+  for (const commentId of anchoredCommentIds) {
+    restoreStashedCommentEntityTree(editor, commentId);
+  }
+
   const store = getCommentEntityStore(editor);
   const infosById = new Map<string, TrackedChangeCommentInfo>();
 
@@ -640,7 +647,7 @@ function buildCommentInfos(editor: Editor): TrackedChangeCommentInfo[] {
     infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
   }
 
-  const canonicalByCommentId = mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+  const canonicalByCommentId = mergeAnchorData(editor, infosById, anchors);
   mergeTrackedChangeCommentInfos(editor, infosById);
 
   for (const [commentId, canonical] of canonicalByCommentId.entries()) {

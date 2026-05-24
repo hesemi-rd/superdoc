@@ -11,6 +11,7 @@ export { buildCommentJsonFromText } from '../../utils/comment-content.js';
 import { buildCommentJsonFromText } from '../../utils/comment-content.js';
 
 const FALLBACK_STORE_KEY = '__documentApiComments';
+const DELETED_COMMENT_SNAPSHOT_KEY = '__documentApiDeletedCommentSnapshots';
 
 export interface CommentEntityRecord {
   commentId?: string;
@@ -51,16 +52,31 @@ type EditorWithCommentStorage = Editor & {
 };
 
 function ensureFallbackStore(editor: EditorWithCommentStorage): CommentEntityRecord[] {
-  if (!editor.storage) {
-    (editor as unknown as Record<string, unknown>).storage = {};
-  }
-  const storage = editor.storage as Record<string, unknown>;
+  const storage = ensureEditorStorage(editor);
 
   if (!Array.isArray(storage[FALLBACK_STORE_KEY])) {
     storage[FALLBACK_STORE_KEY] = [];
   }
 
   return storage[FALLBACK_STORE_KEY] as CommentEntityRecord[];
+}
+
+function ensureEditorStorage(editor: EditorWithCommentStorage): Record<string, unknown> {
+  if (!editor.storage) {
+    (editor as unknown as Record<string, unknown>).storage = {};
+  }
+  return editor.storage as Record<string, unknown>;
+}
+
+function getDeletedCommentSnapshotStore(editor: Editor): Map<string, CommentEntityRecord> {
+  const storage = ensureEditorStorage(editor as EditorWithCommentStorage);
+  const existing = storage[DELETED_COMMENT_SNAPSHOT_KEY];
+  if (existing instanceof Map) {
+    return existing as Map<string, CommentEntityRecord>;
+  }
+  const created = new Map<string, CommentEntityRecord>();
+  storage[DELETED_COMMENT_SNAPSHOT_KEY] = created;
+  return created;
 }
 
 export function getCommentEntityStore(editor: Editor): CommentEntityRecord[] {
@@ -126,6 +142,59 @@ export function removeCommentEntityTree(store: CommentEntityRecord[], commentId:
 
   store.splice(0, store.length, ...kept);
   return removed;
+}
+
+function commentEntityIdentity(entry: CommentEntityRecord | undefined): string | undefined {
+  return toNonEmptyString(entry?.commentId) ?? toNonEmptyString(entry?.importedId);
+}
+
+export function stashRemovedCommentEntities(editor: Editor, removed: ReadonlyArray<CommentEntityRecord>): void {
+  if (removed.length === 0) return;
+  const snapshots = getDeletedCommentSnapshotStore(editor);
+  for (const entry of removed) {
+    const identity = commentEntityIdentity(entry);
+    if (!identity) continue;
+    snapshots.set(identity, { ...entry });
+  }
+}
+
+export function restoreStashedCommentEntityTree(editor: Editor, rootCommentId: string): CommentEntityRecord[] {
+  const snapshots = getDeletedCommentSnapshotStore(editor);
+  const store = getCommentEntityStore(editor);
+  const root = Array.from(snapshots.values()).find(
+    (entry) =>
+      toNonEmptyString(entry.commentId) === rootCommentId || toNonEmptyString(entry.importedId) === rootCommentId,
+  );
+  if (!root) return [];
+
+  const restoreIds = new Set<string>();
+  const rootIdentity = commentEntityIdentity(root);
+  if (!rootIdentity) return [];
+  restoreIds.add(rootIdentity);
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const entry of snapshots.values()) {
+      const identity = commentEntityIdentity(entry);
+      if (!identity || restoreIds.has(identity)) continue;
+      const parentId = toNonEmptyString(entry.parentCommentId);
+      if (!parentId || !restoreIds.has(parentId)) continue;
+      restoreIds.add(identity);
+      changed = true;
+    }
+  }
+
+  const restored: CommentEntityRecord[] = [];
+  for (const identity of restoreIds) {
+    const snapshot = snapshots.get(identity);
+    if (!snapshot) continue;
+    upsertCommentEntity(store, identity, { ...snapshot });
+    snapshots.delete(identity);
+    restored.push(snapshot);
+  }
+
+  return restored;
 }
 
 function collectTextFragments(value: unknown, sink: string[]): void {

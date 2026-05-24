@@ -8,6 +8,8 @@ import {
   getCommentEntityStore,
   isCommentResolved,
   removeCommentEntityTree,
+  restoreStashedCommentEntityTree,
+  stashRemovedCommentEntities,
   syncCommentEntitiesFromCollaboration,
   toCommentInfo,
   upsertCommentEntity,
@@ -125,6 +127,32 @@ describe('removeCommentEntityTree', () => {
   });
 });
 
+describe('stashRemovedCommentEntities / restoreStashedCommentEntityTree', () => {
+  it('restores a removed root comment and its reply payloads', () => {
+    const editor = makeEditorWithConverter([
+      { commentId: 'c1', commentText: 'Root' },
+      { commentId: 'c2', parentCommentId: 'c1', commentText: 'Reply' },
+    ]);
+    const store = getCommentEntityStore(editor);
+
+    const removed = removeCommentEntityTree(store, 'c1');
+    expect(store).toEqual([]);
+
+    stashRemovedCommentEntities(editor, removed);
+    const restored = restoreStashedCommentEntityTree(editor, 'c1');
+
+    expect(restored.map((entry) => entry.commentId).sort()).toEqual(['c1', 'c2']);
+    expect(store).toHaveLength(2);
+    expect(findCommentEntity(store, 'c1')?.commentText).toBe('Root');
+    expect(findCommentEntity(store, 'c2')?.commentText).toBe('Reply');
+  });
+
+  it('returns empty when there is no stashed tree for the comment id', () => {
+    const editor = makeEditorWithConverter();
+    expect(restoreStashedCommentEntityTree(editor, 'missing')).toEqual([]);
+  });
+});
+
 describe('extractCommentText', () => {
   it('returns commentText when available', () => {
     expect(extractCommentText({ commentText: 'Hello' })).toBe('Hello');
@@ -169,17 +197,21 @@ describe('buildCommentJsonFromText', () => {
     ]);
   });
 
-  it('strips HTML tags from input', () => {
+  it('preserves literal markup-looking text as plain text', () => {
     const result = buildCommentJsonFromText('<b>Bold</b> text');
     expect(result[0]).toMatchObject({
-      content: [{ content: [{ text: 'Bold text' }] }],
+      content: [{ content: [{ text: '<b>Bold</b> text' }] }],
     });
   });
 
-  it('replaces &nbsp; with spaces', () => {
-    const result = buildCommentJsonFromText('Hello&nbsp;world');
+  it('preserves paragraph boundaries from newline-delimited plain text', () => {
+    const result = buildCommentJsonFromText('Hello\nworld');
+    expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      content: [{ content: [{ text: 'Hello world' }] }],
+      content: [{ content: [{ text: 'Hello' }] }],
+    });
+    expect(result[1]).toMatchObject({
+      content: [{ content: [{ text: 'world' }] }],
     });
   });
 });

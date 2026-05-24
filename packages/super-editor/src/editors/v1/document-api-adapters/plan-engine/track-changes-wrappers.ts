@@ -31,6 +31,14 @@ import type {
 } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import {
+  type CommentEntityRecord,
+  findCommentEntity,
+  getCommentEntityStore,
+  removeCommentEntityTree,
+  stashRemovedCommentEntities,
+} from '../helpers/comment-entity-store.js';
+import { resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
 import { resolveTextRangeInBlock } from '../helpers/text-offset-resolver.js';
@@ -118,6 +126,8 @@ function buildProjectedInfo(
       date: snapshot.date,
       excerpt: snapshot.excerpt,
       ...buildChangedTextFields(type, snapshot.excerpt),
+      origin: snapshot.origin,
+      imported: snapshot.imported,
     },
     handleKey: `${snapshot.anchorKey}${options.handleSuffix ?? ''}`,
     snapshot,
@@ -300,6 +310,122 @@ function decisionFailureReceipt(editor: Editor, fallbackMessage: string, fallbac
   };
 }
 
+type DecisionCommentEffectReceipt = {
+  deletedComments?: Array<{ id?: string | null }>;
+  detachedComments?: Array<{ id?: string | null }>;
+};
+
+function commentEntityId(record: CommentEntityRecord): string | null {
+  return toNonEmptyString(record.commentId) ?? toNonEmptyString(record.importedId);
+}
+
+function isTrackedChangeLinkedRootComment(record: CommentEntityRecord): boolean {
+  return (
+    !toNonEmptyString(record.parentCommentId) &&
+    (record.trackedChange === true ||
+      toNonEmptyString(record.trackedChangeParentId) != null ||
+      record.trackedChangeType != null ||
+      record.trackedChangeAnchorKey != null)
+  );
+}
+
+function trackedCommentRootHasLiveAnchors(editor: Editor, commentId: string, record: CommentEntityRecord): boolean {
+  const aliases = new Set([commentId, toNonEmptyString(record.importedId)].filter((value): value is string => !!value));
+  for (const alias of aliases) {
+    if (resolveCommentAnchorsById(editor, alias).length > 0) return true;
+  }
+  return false;
+}
+
+function emitDeletedCommentUpdate(editor: Editor, commentId: string): void {
+  const emitter = (editor as unknown as { emit?: (event: string, payload: unknown) => void }).emit;
+  if (typeof emitter !== 'function') return;
+
+  const documentId = toNonEmptyString(editor.options?.documentId) ?? null;
+  emitter.call(editor, 'commentsUpdate', {
+    type: 'deleted',
+    comment: {
+      commentId,
+      documentId,
+      fileId: documentId,
+    },
+  });
+}
+
+function pruneMissingTrackedCommentRoots(editor: Editor): string[] {
+  const store = getCommentEntityStore(editor);
+  const rootIds = Array.from(
+    new Set(
+      store
+        .filter(isTrackedChangeLinkedRootComment)
+        .map((record) => commentEntityId(record))
+        .filter((commentId): commentId is string => commentId != null),
+    ),
+  );
+  const removedIds = new Set<string>();
+
+  for (const commentId of rootIds) {
+    const record = findCommentEntity(store, commentId);
+    if (!record) continue;
+    if (trackedCommentRootHasLiveAnchors(editor, commentId, record)) continue;
+    const removed = removeCommentEntityTree(store, commentId);
+    stashRemovedCommentEntities(editor, removed);
+    for (const removedRecord of removed) {
+      const removedId = commentEntityId(removedRecord);
+      if (removedId) removedIds.add(removedId);
+    }
+  }
+
+  return Array.from(removedIds);
+}
+
+function applyDecisionCommentEffects(hostEditor: Editor, decisionEditor: Editor): void {
+  const storage = (
+    decisionEditor as {
+      storage?: {
+        trackChanges?: {
+          lastDecisionReceipt?: DecisionCommentEffectReceipt | null;
+        };
+      };
+    }
+  ).storage;
+  const store = getCommentEntityStore(hostEditor);
+  const receipt = storage?.trackChanges?.lastDecisionReceipt ?? null;
+  const deletedCommentIds = new Set(
+    (receipt?.deletedComments ?? []).map((entry) => toNonEmptyString(entry?.id)).filter(Boolean),
+  );
+  const detachedCommentIds = new Set(
+    (receipt?.detachedComments ?? [])
+      .map((entry) => toNonEmptyString(entry?.id))
+      .filter((id): id is string => Boolean(id) && !deletedCommentIds.has(id)),
+  );
+
+  for (const commentId of deletedCommentIds) {
+    const removed = removeCommentEntityTree(store, commentId);
+    stashRemovedCommentEntities(hostEditor, removed);
+  }
+
+  for (const commentId of detachedCommentIds) {
+    const record = findCommentEntity(store, commentId);
+    if (!record) continue;
+    record.trackedChange = false;
+    record.trackedChangeParentId = null;
+    record.trackedChangeType = null;
+    record.trackedChangeDisplayType = null;
+    record.trackedChangeStory = null;
+    record.trackedChangeStoryKind = null;
+    record.trackedChangeStoryLabel = null;
+    record.trackedChangeAnchorKey = null;
+    record.trackedChangeText = null;
+    record.deletedText = null;
+  }
+
+  const prunedCommentIds = pruneMissingTrackedCommentRoots(hostEditor);
+  for (const commentId of prunedCommentIds) {
+    emitDeletedCommentUpdate(hostEditor, commentId);
+  }
+}
+
 function resolveListScope(input: TrackChangesListInput | undefined): 'body' | 'all' | { story: StoryLocator } {
   if (!input || input.in === undefined) return 'body';
   if (input.in === 'all') return 'all';
@@ -347,6 +473,8 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
       excerpt,
       insertedText,
       deletedText,
+      origin,
+      imported,
     } = info;
     return buildDiscoveryItem(info.id, handle, {
       address,
@@ -362,6 +490,8 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
       excerpt,
       insertedText,
       deletedText,
+      origin,
+      imported,
     });
   });
 
@@ -427,6 +557,8 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
     date: toNonEmptyString(resolved.change.attrs.date),
     excerpt,
     ...buildChangedTextFields(type, excerpt),
+    origin: toNonEmptyString(resolved.change.attrs.origin) as TrackChangeInfo['origin'],
+    imported: Boolean(toNonEmptyString(resolved.change.attrs.sourceId)),
   };
 }
 
@@ -481,6 +613,7 @@ function decideSingle(
   }
 
   getTrackedChangeIndex(hostEditor).invalidate(resolved.story);
+  applyDecisionCommentEffects(hostEditor, resolved.editor);
 
   return { success: true };
 }
@@ -565,6 +698,7 @@ function decideAll(
       runtime.commit(editor);
     }
     index.invalidate(story);
+    applyDecisionCommentEffects(editor, runtime.editor);
   }
 
   if (!anyApplied) {
@@ -683,5 +817,6 @@ export function trackChangesDecideRangeWrapper(
     });
   }
   getTrackedChangeIndex(editor).invalidate({ kind: 'story', storyType: 'body' });
+  applyDecisionCommentEffects(editor, editor);
   return { success: true };
 }

@@ -73,7 +73,39 @@ import { TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY } from '@extensions/track-changes
  * @param {ParsedDocx} docx The parsed docx object
  * @returns {'word' | 'google-docs' | 'unknown'} The detected origin
  */
+const OFFICE_DOCUMENT_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
+
+const listPackageRelationships = (docx) => {
+  try {
+    const relationships = docx?.['_rels/.rels']?.elements?.find((el) => matchesElementName(el?.name, 'Relationships'));
+    return Array.isArray(relationships?.elements)
+      ? relationships.elements.filter((el) => matchesElementName(el?.name, 'Relationship'))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const looksLikeGoogleDocsMinimalPackage = (docx) => {
+  const packageRelationships = listPackageRelationships(docx);
+  if (packageRelationships.length !== 1) return false;
+  if (packageRelationships[0]?.attributes?.Type !== OFFICE_DOCUMENT_RELATIONSHIP) return false;
+  return !docx?.['docProps/app.xml'] && !docx?.['docProps/core.xml'] && !docx?.['word/webSettings.xml'];
+};
+
 const detectDocumentOrigin = (docx) => {
+  const storedOrigin = readCustomProperty(docx, SUPERDOC_DOCUMENT_ORIGIN_PROPERTY);
+  if (storedOrigin && STORED_DOCUMENT_ORIGINS.has(storedOrigin)) {
+    return storedOrigin;
+  }
+
+  if (readCustomProperty(docx, 'SuperdocVersion') || readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY)) {
+    return 'superdoc';
+  }
+
   const commentsExtended = docx['word/commentsExtended.xml'];
   if (commentsExtended) {
     const { elements: initialElements = [] } = commentsExtended;
@@ -93,6 +125,10 @@ const detectDocumentOrigin = (docx) => {
     return 'google-docs';
   }
 
+  if (looksLikeGoogleDocsMinimalPackage(docx)) {
+    return 'google-docs';
+  }
+
   return 'unknown';
 };
 
@@ -101,7 +137,7 @@ const matchesElementName = (name, localName) => {
   return name === localName || name.endsWith(`:${localName}`);
 };
 
-const readCustomProperty = (docx, propertyName) => {
+function readCustomProperty(docx, propertyName) {
   try {
     const customXml = docx?.['docProps/custom.xml'];
     const properties = customXml?.elements?.find((el) => matchesElementName(el?.name, 'Properties'));
@@ -113,7 +149,7 @@ const readCustomProperty = (docx, propertyName) => {
   } catch {
     return null;
   }
-};
+}
 
 const parseTrackedChangeSourceIdMap = (raw) => {
   if (typeof raw !== 'string' || raw.length === 0) return new Map();

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   resolveTrackedChangeInStory: vi.fn(),
   getTrackedChangeIndex: vi.fn(),
   resolveStoryRuntime: vi.fn(),
+  resolveCommentAnchorsById: vi.fn(),
 }));
 
 vi.mock('./revision-tracker.js', () => ({
@@ -33,12 +34,17 @@ vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
+vi.mock('../helpers/comment-target-resolver.js', () => ({
+  resolveCommentAnchorsById: mocks.resolveCommentAnchorsById,
+}));
+
 import {
   trackChangesAcceptAllWrapper,
   trackChangesAcceptWrapper,
   trackChangesDecideRangeWrapper,
   trackChangesGetWrapper,
   trackChangesListWrapper,
+  trackChangesRejectWrapper,
   getCachedProjectedTrackedChangeSnapshot,
 } from './track-changes-wrappers.js';
 
@@ -137,9 +143,47 @@ beforeEach(() => {
     subscribe: vi.fn(),
     dispose: vi.fn(),
   });
+  mocks.resolveCommentAnchorsById.mockReturnValue([{ commentId: 'comment-1' }]);
 });
 
 describe('track-changes-wrappers revision guard', () => {
+  it('surfaces tracked-change provenance fields on list results', () => {
+    const hostEditor = makeEditor();
+    mocks.getTrackedChangeIndex.mockReturnValue({
+      get: vi.fn(() => [
+        {
+          address: { kind: 'entity', entityType: 'trackedChange', entityId: 'canon-1' },
+          runtimeRef: { storyKey: 'body', rawId: 'raw-1' },
+          story: { kind: 'story', storyType: 'body' },
+          type: 'insert',
+          excerpt: 'new text',
+          origin: 'google-docs',
+          imported: true,
+          storyLabel: 'Body',
+          storyKind: 'body',
+          anchorKey: 'tc::body::raw-1',
+          hasInsert: true,
+          hasDelete: false,
+          hasFormat: false,
+          range: { from: 1, to: 9 },
+        },
+      ]),
+      getAll: vi.fn(() => []),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(),
+      dispose: vi.fn(),
+    });
+
+    const result = trackChangesListWrapper(hostEditor, {});
+
+    expect(result.items[0]).toMatchObject({
+      id: 'canon-1',
+      origin: 'google-docs',
+      imported: true,
+    });
+  });
+
   it('checks expectedRevision on the host editor before accepting a non-body tracked change', () => {
     const hostEditor = makeEditor();
     const storyEditor = makeEditor({ acceptTrackedChangeById: vi.fn(() => true) });
@@ -218,6 +262,153 @@ describe('track-changes-wrappers revision guard', () => {
         code: 'PERMISSION_DENIED',
         message: 'permission denied for accept of change "canon-1".',
         details: { changeId: 'canon-1' },
+      },
+    });
+  });
+
+  it('removes deleted tracked-change-linked comments from the host store after a successful decision', () => {
+    const hostEditor = {
+      ...makeEditor(),
+      converter: {
+        comments: [
+          { commentId: 'comment-1', trackedChange: true, trackedChangeParentId: 'canon-1' },
+          { commentId: 'reply-1', parentCommentId: 'comment-1' },
+        ],
+      },
+    } as unknown as Editor;
+    const storyEditor = {
+      ...makeEditor({ rejectTrackedChangeById: vi.fn(() => true) }),
+      storage: {
+        trackChanges: {
+          lastDecisionFailure: null,
+          lastDecisionReceipt: {
+            deletedComments: [{ id: 'comment-1' }],
+          },
+        },
+      },
+    } as unknown as Editor;
+
+    mocks.resolveTrackedChangeInStory.mockReturnValue({
+      editor: storyEditor,
+      story: footnoteStory,
+      runtimeRef: { storyKey: 'fn:5', rawId: 'raw-1' },
+      change: {
+        id: 'canon-1',
+        rawId: 'raw-1',
+        from: 1,
+        to: 2,
+        attrs: {},
+      },
+    });
+
+    const receipt = trackChangesRejectWrapper(hostEditor, { id: 'canon-1', story: footnoteStory });
+
+    expect(receipt).toEqual({ success: true });
+    expect(hostEditor.converter!.comments).toEqual([]);
+  });
+
+  it('detaches surviving comments from tracked-change threading when the decision receipt says to detach them', () => {
+    const hostEditor = {
+      ...makeEditor(),
+      converter: {
+        comments: [
+          {
+            commentId: 'comment-2',
+            trackedChange: true,
+            trackedChangeParentId: 'canon-1',
+            trackedChangeType: 'delete',
+            trackedChangeAnchorKey: 'tc::body::canon-1',
+            trackedChangeText: 'deleted text',
+            deletedText: 'deleted text',
+          },
+        ],
+      },
+    } as unknown as Editor;
+    const storyEditor = {
+      ...makeEditor({ acceptTrackedChangeById: vi.fn(() => true) }),
+      storage: {
+        trackChanges: {
+          lastDecisionFailure: null,
+          lastDecisionReceipt: {
+            detachedComments: [{ id: 'comment-2' }],
+          },
+        },
+      },
+    } as unknown as Editor;
+
+    mocks.resolveTrackedChangeInStory.mockReturnValue({
+      editor: storyEditor,
+      story: footnoteStory,
+      runtimeRef: { storyKey: 'fn:5', rawId: 'raw-1' },
+      change: {
+        id: 'canon-1',
+        rawId: 'raw-1',
+        from: 1,
+        to: 2,
+        attrs: {},
+      },
+    });
+
+    const receipt = trackChangesAcceptWrapper(hostEditor, { id: 'canon-1', story: footnoteStory });
+
+    expect(receipt).toEqual({ success: true });
+    expect(hostEditor.converter!.comments[0]).toMatchObject({
+      commentId: 'comment-2',
+      trackedChange: false,
+      trackedChangeParentId: null,
+      trackedChangeType: null,
+      trackedChangeAnchorKey: null,
+      trackedChangeText: null,
+      deletedText: null,
+    });
+  });
+
+  it('prunes tracked-change comment roots whose anchors disappear even when the decision receipt does not enumerate them', () => {
+    const hostEditor = {
+      ...makeEditor(),
+      options: { trackedChanges: {}, documentId: 'doc-1' },
+      emit: vi.fn(),
+      converter: {
+        comments: [
+          { commentId: 'comment-3', trackedChange: true, trackedChangeParentId: 'canon-1' },
+          { commentId: 'reply-3', parentCommentId: 'comment-3' },
+        ],
+      },
+    } as unknown as Editor;
+    const storyEditor = {
+      ...makeEditor({ acceptTrackedChangeById: vi.fn(() => true) }),
+      storage: {
+        trackChanges: {
+          lastDecisionFailure: null,
+          lastDecisionReceipt: null,
+        },
+      },
+    } as unknown as Editor;
+
+    mocks.resolveCommentAnchorsById.mockReturnValue([]);
+    mocks.resolveTrackedChangeInStory.mockReturnValue({
+      editor: storyEditor,
+      story: footnoteStory,
+      runtimeRef: { storyKey: 'fn:5', rawId: 'raw-1' },
+      change: {
+        id: 'canon-1',
+        rawId: 'raw-1',
+        from: 1,
+        to: 2,
+        attrs: {},
+      },
+    });
+
+    const receipt = trackChangesAcceptWrapper(hostEditor, { id: 'canon-1', story: footnoteStory });
+
+    expect(receipt).toEqual({ success: true });
+    expect(hostEditor.converter!.comments).toEqual([]);
+    expect(hostEditor.emit).toHaveBeenCalledWith('commentsUpdate', {
+      type: 'deleted',
+      comment: {
+        commentId: 'comment-3',
+        documentId: 'doc-1',
+        fileId: 'doc-1',
       },
     });
   });

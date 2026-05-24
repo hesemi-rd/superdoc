@@ -48,6 +48,8 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
 const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -1278,6 +1280,13 @@ class SuperConverter {
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
+    const storedDocumentOrigin = STORED_DOCUMENT_ORIGINS.has(this.documentOrigin) ? this.documentOrigin : 'superdoc';
+    SuperConverter.setStoredCustomProperty(
+      this.convertedXml,
+      SUPERDOC_DOCUMENT_ORIGIN_PROPERTY,
+      storedDocumentOrigin,
+      false,
+    );
 
     // Store document GUID if document was modified
     if (this.documentModified || this.documentGuid) {

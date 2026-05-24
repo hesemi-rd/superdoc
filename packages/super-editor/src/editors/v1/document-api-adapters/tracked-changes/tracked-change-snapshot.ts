@@ -7,6 +7,7 @@
 import type {
   StoryLocator,
   TrackedChangeAddress,
+  TrackChangeProvenanceOrigin,
   TrackChangeType,
   TrackChangeOverlapInfo,
   TrackChangeWordRevisionIds,
@@ -34,6 +35,10 @@ export interface TrackedChangeSnapshot {
   excerpt?: string;
   /** Raw imported Word revision IDs, if present. */
   wordRevisionIds?: TrackChangeWordRevisionIds;
+  /** Source application or package family detected on import. */
+  origin?: TrackChangeProvenanceOrigin;
+  /** True when this tracked change came from an imported document revision. */
+  imported?: boolean;
   /** Overlap metadata for nested tracked changes that share the same text range. */
   overlap?: TrackChangeOverlapInfo;
   /** Human-readable label for sidebar cards ("Footer · Section 3", "Footnote 12"). */

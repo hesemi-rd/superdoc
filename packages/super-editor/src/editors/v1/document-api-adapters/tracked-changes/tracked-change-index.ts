@@ -281,6 +281,8 @@ class TrackedChangeIndexImpl implements TrackedChangeIndex {
       date: toNonEmptyString(change.attrs.date),
       excerpt,
       wordRevisionIds: change.wordRevisionIds ? { ...change.wordRevisionIds } : undefined,
+      origin: toNonEmptyString(change.attrs.origin) as TrackedChangeSnapshot['origin'],
+      imported: Boolean(toNonEmptyString(change.attrs.sourceId)),
       overlap: copyOverlapInfo(change.overlap, canonicalIdByAlias),
       storyLabel,
       storyKind,
