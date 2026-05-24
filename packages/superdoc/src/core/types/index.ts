@@ -181,6 +181,25 @@ export interface RuntimeDocument extends Document {
    * Use the Document API (`editor.doc`) instead.
    */
   getPresentationEditor?: () => SuperEditorPresentationEditor | null | undefined;
+  /**
+   * Runtime-only flag mirrored from `Config.rulers` per document by the
+   * Pinia store. SuperDoc.js writes this on each document during the
+   * setShowRulers flow; not part of consumer-supplied `Document`.
+   */
+  rulers?: boolean;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * mode switches. Not part of consumer-supplied `Document`.
+   */
+  restoreComments?: () => void;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * DOCX export when comments should be stripped. Not part of
+   * consumer-supplied `Document`.
+   */
+  removeComments?: () => void;
 }
 
 /** Collaboration module configuration. */
