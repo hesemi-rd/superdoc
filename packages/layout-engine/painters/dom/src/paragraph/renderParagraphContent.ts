@@ -12,10 +12,13 @@ import {
   effectiveTableCellSpacing,
   expandRunsForInlineNewlines,
   getParagraphInlineDirection,
+  sliceRunsForLine,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import {
   applySdtContainerChrome,
+  getSdtContainerMetadata,
+  isStructuredContentMetadata,
   shouldRenderSdtContainerChrome,
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
@@ -191,6 +194,9 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
           ...params,
           lineTopOffset: lineTopOffset + beforeHeight,
         });
+  if (applySdtChrome) {
+    applyBlockSdtChromeBounds(frameEl, block, getRenderedContentLines(params), width);
+  }
 
   let renderedHeight = renderResult.renderedHeight;
   const originalLineCount = measure.lines?.length ?? linesOverride?.length ?? 0;
@@ -220,6 +226,64 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     totalHeight: beforeHeight + renderedHeight + afterHeight,
     renderedLines: renderResult.renderedLines,
   };
+};
+
+const getRenderedContentLines = (params: RenderParagraphContentParams): Line[] => {
+  if (params.resolvedContent) {
+    return params.resolvedContent.lines.map((line) => line.line);
+  }
+
+  const lines = params.linesOverride ?? params.measure.lines ?? [];
+  return lines.slice(params.localStartLine, Math.min(params.localEndLine, lines.length));
+};
+
+const applyBlockSdtChromeBounds = (
+  element: HTMLElement,
+  block: ParagraphBlock,
+  lines: Line[],
+  fragmentWidth: number,
+): void => {
+  const sdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
+  if (!isStructuredContentMetadata(sdt) || sdt.scope !== 'block') return;
+
+  const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
+  let contentLeft = Number.POSITIVE_INFINITY;
+  let contentRight = Number.NEGATIVE_INFINITY;
+
+  for (const line of lines) {
+    const runsForLine = sliceRunsForLine(expandedBlock, line);
+    if (runsForLine.length === 0) continue;
+
+    let hasVisibleContent = false;
+    for (const run of runsForLine) {
+      if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+      if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+        if ((run.text ?? '').trim().length === 0) continue;
+      }
+      hasVisibleContent = true;
+      break;
+    }
+
+    if (!hasVisibleContent) continue;
+
+    const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
+    if (lineWidth <= 0) continue;
+
+    const alignmentSlack = Math.max(0, fragmentWidth - lineWidth);
+    const alignment = block.attrs?.alignment;
+    const lineLeft = alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0;
+    contentLeft = Math.min(contentLeft, lineLeft);
+    contentRight = Math.max(contentRight, lineLeft + lineWidth);
+  }
+
+  if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
+
+  const chromeLeft = Math.max(0, contentLeft);
+  const chromeWidth = Math.max(0, Math.min(fragmentWidth, contentRight) - chromeLeft);
+  if (chromeWidth <= 0 || chromeWidth >= fragmentWidth) return;
+
+  element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
+  element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
 };
 
 const renderResolvedLines = (
