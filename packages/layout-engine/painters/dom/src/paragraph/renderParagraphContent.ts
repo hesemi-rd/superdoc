@@ -195,7 +195,7 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
           lineTopOffset: lineTopOffset + beforeHeight,
         });
   if (applySdtChrome) {
-    applyBlockSdtChromeBounds(frameEl, block, getRenderedContentLines(params), width);
+    applyBlockSdtChromeBounds(frameEl, block, getRenderedContentLines(params), width, resolvedContent);
   }
 
   let renderedHeight = renderResult.renderedHeight;
@@ -242,6 +242,7 @@ const applyBlockSdtChromeBounds = (
   block: ParagraphBlock,
   lines: Line[],
   fragmentWidth: number,
+  content?: ResolvedParagraphContent,
 ): void => {
   const sdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
   if (!isStructuredContentMetadata(sdt) || sdt.scope !== 'block') return;
@@ -250,7 +251,7 @@ const applyBlockSdtChromeBounds = (
   let contentLeft = Number.POSITIVE_INFINITY;
   let contentRight = Number.NEGATIVE_INFINITY;
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const runsForLine = sliceRunsForLine(expandedBlock, line);
     if (runsForLine.length === 0) continue;
 
@@ -269,9 +270,11 @@ const applyBlockSdtChromeBounds = (
     const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
     if (lineWidth <= 0) continue;
 
-    const alignmentSlack = Math.max(0, fragmentWidth - lineWidth);
+    const lineOffset = resolveBlockSdtChromeLineOffset(block, line, content?.lines[index], index);
+    const alignmentSlack = Math.max(0, fragmentWidth - lineOffset - lineWidth);
     const alignment = block.attrs?.alignment;
-    const lineLeft = alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0;
+    const lineLeft =
+      lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
     contentLeft = Math.min(contentLeft, lineLeft);
     contentRight = Math.max(contentRight, lineLeft + lineWidth);
   }
@@ -284,6 +287,48 @@ const applyBlockSdtChromeBounds = (
 
   element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
   element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
+};
+
+const resolveBlockSdtChromeLineOffset = (
+  block: ParagraphBlock,
+  line: Line,
+  resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  lineIndex: number,
+): number => {
+  if (resolvedLine) {
+    if (resolvedLine.isListFirstLine) {
+      return resolvedLine.resolvedListTextStartPx ?? resolvedLine.indentOffset;
+    }
+    if (resolvedLine.hasExplicitSegmentPositioning) {
+      return resolvedLine.indentOffset;
+    }
+    return Math.max(0, resolvedLine.paddingLeftPx + resolvedLine.textIndentPx);
+  }
+
+  const paraIndent = block.attrs?.indent;
+  const indentLeft = paraIndent?.left ?? 0;
+  const firstLine = paraIndent?.firstLine ?? 0;
+  const hanging = paraIndent?.hanging ?? 0;
+  const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
+  const firstLineOffset = suppressFirstLineIndent ? 0 : firstLine - hanging;
+  const isFirstLine = lineIndex === 0;
+  const lineHasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+
+  if (lineHasExplicitSegmentPositioning) {
+    const effectiveLeftIndent = indentLeft < 0 ? 0 : indentLeft;
+    return Math.max(0, effectiveLeftIndent + (isFirstLine ? firstLineOffset : 0));
+  }
+
+  if (isFirstLine) {
+    return Math.max(0, indentLeft + firstLineOffset);
+  }
+  if (indentLeft > 0) {
+    return indentLeft;
+  }
+  if (hanging > 0 && indentLeft >= 0) {
+    return hanging;
+  }
+  return 0;
 };
 
 const renderResolvedLines = (
