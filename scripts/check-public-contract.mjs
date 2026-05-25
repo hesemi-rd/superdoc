@@ -29,7 +29,20 @@
  *                                      land without `// @ts-check` or
  *                                      when the allowlist carries
  *                                      empty/stale entries.
- *   4. build                         - vite build + the postbuild
+ *   4. public-method-coverage        - obligation-based ratchet over
+ *                                      public SuperDoc methods +
+ *                                      getters. For each member the
+ *                                      AST computes which obligations
+ *                                      are meaningful (parameters /
+ *                                      returns / call); each unmet
+ *                                      obligation must be on the debt
+ *                                      snapshot or the gate fails.
+ *                                      Call sites do NOT satisfy
+ *                                      parameters/returns obligations
+ *                                      on their own — that's why
+ *                                      `search(text: string)` shipped
+ *                                      under v1 of this gate.
+ *   5. build                         - vite build + the postbuild
  *                                      validator chain
  *                                      (check-tsconfig-type-surface,
  *                                      ensure-types, audit-bundle,
@@ -40,29 +53,29 @@
  *                                      Skipped when `--skip-build` is
  *                                      passed (CI calls `pnpm run build`
  *                                      separately in its own step).
- *   5. consumer-typecheck-matrix     - packs superdoc + installs the
+ *   6. consumer-typecheck-matrix     - packs superdoc + installs the
  *                                      tarball into
  *                                      tests/consumer-typecheck/
  *                                      node_modules/, then runs every
  *                                      consumer scenario.
- *   6. deep-type-audit-supported-root - strict gate on the supported-
+ *   7. deep-type-audit-supported-root - strict gate on the supported-
  *                                      root public surface; fails on any
  *                                      `any` leak. Reuses the install
- *                                      from stage 5.
- *   7. package-shape                 - publint + attw against the packed
+ *                                      from stage 6.
+ *   8. package-shape                 - publint + attw against the packed
  *                                      manifest. Reuses the tarball
- *                                      from stage 5.
- *   8. export-snapshots              - super-editor / legacy / root
+ *                                      from stage 6.
+ *   9. export-snapshots              - super-editor / legacy / root
  *                                      no-growth export snapshots.
  *                                      Reuses the install.
- *   9. root-classification-closure   - no supported-root or legacy-root
+ *  10. root-classification-closure   - no supported-root or legacy-root
  *                                      export references an internal-
  *                                      candidate type in its public
  *                                      declared shape (SD-3212 A1b).
  *
- * Why stage 5 runs before 6-9: stage 5 packs `superdoc.tgz` and
- * installs the tarball into the consumer fixture once. Stages 6, 8,
- * and 9 reuse the installed fixture; stage 7 reuses the packed tarball
+ * Why stage 6 runs before 7-10: stage 6 packs `superdoc.tgz` and
+ * installs the tarball into the consumer fixture once. Stages 7, 9,
+ * and 10 reuse the installed fixture; stage 8 reuses the packed tarball
  * directly. Without this ordering each downstream stage would `--pack`
  * separately and multiply the work.
  *
@@ -121,6 +134,18 @@ const stages = [
       'Per-file checkJs gate for the 6 hand-curated CHECKED_FILES + ratchet that ' +
       'fails when new public-reachable JSDoc files land without // @ts-check. ' +
       'Cheap; runs before the slow build so JSDoc drift fails fast.',
+  },
+  {
+    name: 'public-method-coverage',
+    cwd: REPO_ROOT,
+    cmd: 'node',
+    args: ['tests/consumer-typecheck/check-public-method-coverage.mjs'],
+    blurb:
+      'Obligation-based ratchet over public SuperDoc methods + getters. ' +
+      'Each member has computed obligations (parameters / returns / call) ' +
+      'that must be satisfied by a typed assertion in a consumer fixture, ' +
+      'or be on the debt snapshot. Call sites do NOT satisfy parameters/' +
+      'returns on their own (this is why search(text: string) shipped).',
   },
   {
     name: 'build',
