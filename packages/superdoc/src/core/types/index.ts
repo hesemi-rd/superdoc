@@ -29,6 +29,7 @@ import type {
   FontConfig,
   FontsResolvedPayload,
   ProofingProvider,
+  User,
 } from '@superdoc/super-editor';
 
 import type { SuperDoc as SuperDocClass } from '../SuperDoc.js';
@@ -47,32 +48,37 @@ export type NavigableAddress = SuperEditorNavigableAddress;
 /**
  * The current user of this superdoc.
  *
- * Every field is optional on input. `SuperDoc.#init` normalizes a missing
- * or partial `user` by spreading `DEFAULT_USER` over consumer input, so
- * `name` and `email` always have a value at runtime even when the
- * consumer omits them. The typedef stays open so consumers can pass
- * `{ name: 'Ada' }` without a typecheck failure.
+ * Re-exported directly from `@superdoc/super-editor` so the public
+ * consumer-facing `User` (re-exported again at `src/public/index.ts`)
+ * and the internal `User` referenced by SuperDoc method signatures
+ * (`addSharedUser(user: User)`, `removeSharedUser(...)`, etc.) are
+ * the same symbol — not two structurally-similar declarations.
  *
- * Kept structurally compatible with the publicly re-exported
- * `User` from `@superdoc/super-editor` (also optional name/email).
+ * Every field is optional on input. `SuperDoc.#init` normalizes a
+ * missing or partial `user` by spreading `DEFAULT_USER` over consumer
+ * input, so `name` and `email` always have a value at runtime even
+ * when the consumer omits them.
+ *
+ * `User` does NOT carry the collab-awareness `color` field; that is on
+ * the internal `AwarenessUser` (see below), assigned by SuperDoc's
+ * `#assignUserColor()` after `#init`.
  */
-export interface User {
-  /** The user's name. */
-  name?: string;
-  /**
-   * The user's email. May be `null` when the consumer did not provide an
-   * email and SuperDoc fell back to the built-in default user; the runtime
-   * has always exposed `null` here, so the typedef accepts it explicitly
-   * rather than narrowing to `string`. Consumers must narrow before
-   * performing string operations on this field.
-   */
-  email?: string | null;
-  /** The user's photo. */
-  image?: string | null;
+export type { User } from '@superdoc/super-editor';
+
+/**
+ * Internal post-`#init` shape of the active user. Extends the public
+ * `User` with the collab-awareness `color` field assigned by
+ * `SuperDoc.#assignUserColor()` and read by the presence system. Not
+ * part of the consumer-facing surface; consumers continue to pass
+ * `User` via `Config.user`, and SuperDoc widens to `AwarenessUser`
+ * internally once it has computed the color.
+ */
+export interface AwarenessUser extends User {
   /**
    * Awareness color for collaborative cursors. Auto-assigned from the
-   * configured palette (or a default palette) when omitted, derived from a
-   * hash of the user's identity so the assignment is stable across reloads.
+   * configured palette (or a default palette) by `#assignUserColor`,
+   * derived from a hash of the user's identity so the assignment is
+   * stable across reloads.
    */
   color?: string;
 }
@@ -1608,8 +1614,12 @@ export interface InternalConfig extends Config {
   documents: RuntimeDocument[];
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
-  /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
-  user: User;
+  /**
+   * Spread of `DEFAULT_USER` over consumer input by `#init`; `name`
+   * always present. Widened to `AwarenessUser` because `#assignUserColor`
+   * runs synchronously during init and writes `color` into this object.
+   */
+  user: AwarenessUser;
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   layoutEngineOptions: SuperDocLayoutEngineOptions;
 }
