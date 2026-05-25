@@ -17,7 +17,7 @@
  * `goToSearchResult.parameters` is already locked in `search-match.ts`;
  * this file adds the `returns` assertion for the same method.
  */
-import type { NavigableAddress, SearchMatch, SuperDoc } from 'superdoc';
+import type { NavigableAddress, SuperDoc } from 'superdoc';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
@@ -26,15 +26,15 @@ declare const sd: SuperDoc;
 
 // ─── getHTML ─────────────────────────────────────────────────────────
 // Returns the HTML string for every editor in document order. Options
-// are forwarded to `editor.getHTML(options)` on each editor. The
-// parameter is currently untyped at the source (`options = {}`); TS
-// infers `{}?`, which the assertion below locks. A future migration
-// that introduces a real options interface will fail this assertion
-// and force an intentional contract update.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-const _htmlParamsOk: AssertEqual<Parameters<SuperDoc['getHTML']>, [{}?]> = true;
+// are forwarded to `editor.getHTML(options)` on each editor, so the
+// public option shape matches the underlying Editor method:
+// `{ unflattenLists?: boolean }`. The source signature was tightened
+// in this PR to forward that shape explicitly via
+// `Parameters<Editor['getHTML']>[0]`; the assertion below locks it.
+const _htmlParamsOk: AssertEqual<Parameters<SuperDoc['getHTML']>, [{ unflattenLists?: boolean }?]> = true;
 const _htmlReturnOk: AssertEqual<ReturnType<SuperDoc['getHTML']>, string[]> = true;
 const _htmlValue: string[] = sd.getHTML();
+const _htmlValueWithOpts: string[] = sd.getHTML({ unflattenLists: true });
 
 // ─── getZoom ─────────────────────────────────────────────────────────
 // Returns the active zoom percentage. Per JSDoc: 100 by default.
@@ -65,6 +65,7 @@ void [
   _htmlParamsOk,
   _htmlReturnOk,
   _htmlValue,
+  _htmlValueWithOpts,
   _zoomReturnOk,
   _zoomValue,
   _navigateParamsOk,
@@ -77,4 +78,3 @@ void [
 // Suppress unused-import warning for the type-only navigation address;
 // the fixture references it only as a type argument above.
 export type _NavigableAddressUsage = NavigableAddress;
-export type _SearchMatchUsage = SearchMatch;
