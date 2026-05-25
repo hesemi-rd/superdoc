@@ -1397,8 +1397,14 @@ export interface Config {
   password?: string;
   /** The documents to load → soon to be deprecated. */
   documents?: Document[];
-  /** The current user of this SuperDoc. */
-  user?: User;
+  /**
+   * The current user of this SuperDoc. Typed as `AwarenessUser` (an
+   * extension of `User` with the optional `color` field) so consumers
+   * can pass an explicit awareness color and have the runtime honor it
+   * as an override - `SuperDoc#assignUserColor()` skips its hash-based
+   * assignment when `user.color` is already set.
+   */
+  user?: AwarenessUser;
   /** All users of this SuperDoc (can be used for "@"-mentions). */
   users?: User[];
   /** Colors to use for user awareness. */
