@@ -12,6 +12,7 @@ import {
   effectiveTableCellSpacing,
   expandRunsForInlineNewlines,
   getParagraphInlineDirection,
+  shouldApplyJustify,
   sliceRunsForLine,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -201,6 +202,7 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
       getRenderedContentLines(params),
       width,
       lineIndexOffset + localStartLine,
+      continuesOnNext,
       resolvedContent,
     );
   }
@@ -250,6 +252,7 @@ const applyBlockSdtChromeBounds = (
   lines: Line[],
   fragmentWidth: number,
   lineIndexBase: number,
+  fragmentContinuesOnNext: boolean | undefined,
   content?: ResolvedParagraphContent,
 ): void => {
   const sdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
@@ -282,12 +285,23 @@ const applyBlockSdtChromeBounds = (
     const lineIndex = resolvedLine?.lineIndex ?? lineIndexBase + index;
     const lineOffset = resolveBlockSdtChromeLineOffset(block, line, resolvedLine, lineIndex);
     const availableWidth = resolveBlockSdtChromeAvailableWidth(block, line, fragmentWidth, lineOffset, resolvedLine);
-    const alignmentSlack = Math.max(0, availableWidth - lineWidth);
+    const paintedLineWidth = resolveBlockSdtChromePaintedLineWidth(
+      block,
+      line,
+      lineWidth,
+      availableWidth,
+      index,
+      lines.length,
+      fragmentContinuesOnNext,
+      resolvedLine,
+      content,
+    );
+    const alignmentSlack = Math.max(0, availableWidth - paintedLineWidth);
     const alignment = block.attrs?.alignment;
     const lineLeft =
       lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
     contentLeft = Math.min(contentLeft, lineLeft);
-    contentRight = Math.max(contentRight, lineLeft + lineWidth);
+    contentRight = Math.max(contentRight, lineLeft + paintedLineWidth);
   }
 
   if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
@@ -359,6 +373,37 @@ const resolveBlockSdtChromeAvailableWidth = (
     return Math.min(line.maxWidth, fallbackAvailableWidth);
   }
   return fallbackAvailableWidth;
+};
+
+const resolveBlockSdtChromePaintedLineWidth = (
+  block: ParagraphBlock,
+  line: Line,
+  lineWidth: number,
+  availableWidth: number,
+  fragmentLineIndex: number,
+  fragmentLineCount: number,
+  fragmentContinuesOnNext: boolean | undefined,
+  resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  content: ResolvedParagraphContent | undefined,
+): number => {
+  const explicitPositionedSegmentCount = line.segments?.filter((segment) => segment.x !== undefined).length ?? 0;
+  const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
+  const paragraphEndsWithLineBreak =
+    content?.paragraphEndsWithLineBreak === true || block.runs[block.runs.length - 1]?.kind === 'lineBreak';
+  const isLastLineOfParagraph =
+    resolvedLine != null
+      ? resolvedLine.skipJustify
+      : fragmentLineIndex === fragmentLineCount - 1 && !fragmentContinuesOnNext;
+  const justifyShouldApply = shouldApplyJustify({
+    alignment: block.attrs?.alignment,
+    hasExplicitPositioning: line.segments?.some((segment) => segment.x !== undefined) === true,
+    hasExplicitTabStops: line.hasExplicitTabStops === true,
+    isLastLineOfParagraph,
+    paragraphEndsWithLineBreak,
+    skipJustifyOverride: (resolvedLine?.skipJustify ?? false) || hasMultipleExplicitPositionedSegments,
+  });
+
+  return justifyShouldApply ? Math.max(lineWidth, availableWidth) : lineWidth;
 };
 
 const renderResolvedLines = (
