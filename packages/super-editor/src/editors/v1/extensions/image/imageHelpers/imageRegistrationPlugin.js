@@ -208,9 +208,17 @@ const getOrInitMediaStore = (editor) => {
   }
 
   const mediaStore = editor.storage.image.media;
-  const existingFileNames = new Set(Object.keys(mediaStore).map((k) => k.split('/').pop()));
+  const parentMediaStore = editor?.options?.parentEditor?.storage?.image?.media;
+  const mediaStores = [mediaStore];
+  if (parentMediaStore && parentMediaStore !== mediaStore) {
+    mediaStores.push(parentMediaStore);
+  }
+  const existingFileNames = new Set();
+  mediaStores.forEach((store) => {
+    Object.keys(store).forEach((k) => existingFileNames.add(k.split('/').pop()));
+  });
 
-  return { mediaStore, existingFileNames };
+  return { mediaStore, mediaStores, existingFileNames };
 };
 
 /**
@@ -228,7 +236,7 @@ export const handleNodePath = (foundImages, editor, state) => {
 };
 
 const registerImagesInTransaction = (foundImages, editor, tr) => {
-  const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
+  const { mediaStores, existingFileNames } = getOrInitMediaStore(editor);
 
   foundImages.forEach(({ node, pos }) => {
     const { src } = node.attrs;
@@ -237,7 +245,9 @@ const registerImagesInTransaction = (foundImages, editor, tr) => {
     existingFileNames.add(uniqueFileName);
 
     const mediaPath = buildMediaPath(uniqueFileName);
-    mediaStore[mediaPath] = src;
+    mediaStores.forEach((store) => {
+      store[mediaPath] = src;
+    });
 
     // Sync image data to Y.Doc media map so other collab clients can access it.
     // We write directly to the Y.Doc map instead of using editor.commands because
