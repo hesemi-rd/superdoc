@@ -223,16 +223,20 @@ for (const m of members) {
 unmetNow.sort();
 
 const totalObligations = members.reduce((n, m) => n + m.obligations.length, 0);
+const enforcedMembers = members.filter((m) => !allowlistKeys.has(m.name));
+const enforcedObligations = enforcedMembers.reduce((n, m) => n + m.obligations.length, 0);
 
 const HR = '='.repeat(72);
 console.log('[public-method-coverage] SuperDoc public-surface fixture coverage (strict zero)');
 console.log(HR);
-console.log(`Members inspected:           ${members.length}`);
-console.log(`  Methods (non-EventEmitter): ${members.filter((m) => m.kind === 'method').length}`);
-console.log(`  Getters:                    ${members.filter((m) => m.kind === 'getter').length}`);
-console.log(`Total obligations:            ${totalObligations}`);
-console.log(`Allowlisted members:          ${allowlistKeys.size}`);
-console.log(`Unmet obligations:            ${unmetNow.length}`);
+console.log(`Members inspected:               ${members.length}`);
+console.log(`  Methods (non-EventEmitter):    ${members.filter((m) => m.kind === 'method').length}`);
+console.log(`  Getters:                       ${members.filter((m) => m.kind === 'getter').length}`);
+console.log(`Allowlisted members:             ${allowlistKeys.size}`);
+console.log(`Enforced members:                ${enforcedMembers.length}`);
+console.log(`Enforced obligations:            ${enforcedObligations}`);
+console.log(`Total obligations (pre-allowlist): ${totalObligations}`);
+console.log(`Unmet obligations:               ${unmetNow.length}`);
 console.log('');
 
 const failures = [];
@@ -263,6 +267,6 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `OK    ${totalObligations} obligation(s) across ${members.length - allowlistKeys.size} members; zero unmet.`,
+  `OK    ${enforcedObligations} enforced obligation(s) across ${enforcedMembers.length} members; zero unmet.`,
 );
 process.exit(0);
