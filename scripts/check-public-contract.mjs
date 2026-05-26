@@ -136,6 +136,19 @@ const stages = [
       'Cheap; runs before the slow build so JSDoc drift fails fast.',
   },
   {
+    name: 'jsdoc-hygiene-ts',
+    cwd: REPO_ROOT,
+    cmd: 'node',
+    args: ['packages/superdoc/scripts/check-jsdoc-hygiene-ts.cjs'],
+    blurb:
+      'Type-bearing JSDoc gate for .ts source under packages/superdoc/src and ' +
+      'packages/super-editor/src. Grandfathers an existing baseline of violations ' +
+      'and fails on net-new type-bearing JSDoc tags (@param {T}, @returns {T}, ' +
+      '@type, @typedef, @template, etc.). See packages/superdoc/scripts/' +
+      'type-hygiene.md for the rule. Cheap; complements jsdoc-ratchet (which ' +
+      'covers .js files) by enforcing TS-as-single-source on the .ts side.',
+  },
+  {
     name: 'public-method-coverage',
     cwd: REPO_ROOT,
     cmd: 'node',
