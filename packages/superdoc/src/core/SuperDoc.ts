@@ -814,14 +814,18 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Register an optional `Config` callback as a listener for the matching
-   * SuperDoc event. The event key constrains `K`, so TypeScript verifies
-   * that the consumer-typed `Config.onX` matches the runtime
-   * `SuperDocEventMap[event]` payload at compile time. No-ops on
+   * SuperDoc event. The event key constrains `K`, so TypeScript checks
+   * that the consumer-typed `Config.onX` is assignable to
+   * `SuperDocEventMap[event]` at the registration site. No-ops on
    * `undefined`, so optional callbacks do not register dead listeners.
    *
-   * This is the gate that prevents callback/event contract drift; the
+   * This catches most event/callback drift at registration sites; the
    * earlier `any → any` bridge let mismatches like `lockedBy: User` vs
-   * runtime `User | null` ship undetected.
+   * runtime `User | null` ship undetected. It does not catch overly
+   * wide callback types: `(p: {}) => void` is contravariantly
+   * assignable to any narrower payload, so consumer fixtures still
+   * need to lock the exact emitted payload shape per callback (see
+   * `tests/consumer-typecheck/src/config-callback-payloads.ts`).
    */
   #onConfig<K extends keyof SuperDocEventMap>(
     event: K,
