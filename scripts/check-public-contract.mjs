@@ -29,7 +29,17 @@
  *                                      land without `// @ts-check` or
  *                                      when the allowlist carries
  *                                      empty/stale entries.
- *   4. public-method-coverage        - obligation-based ratchet over
+ *   4. jsdoc-hygiene-ts              - type-bearing JSDoc gate for .ts
+ *                                      source under packages/superdoc/src
+ *                                      and packages/super-editor/src.
+ *                                      Companion to jsdoc-ratchet on the
+ *                                      .ts side: enforces TS syntax as
+ *                                      the single source of truth for
+ *                                      shape. Grandfathers an existing
+ *                                      baseline; fails on net-new
+ *                                      type-bearing JSDoc. See
+ *                                      packages/superdoc/scripts/type-hygiene.md.
+ *   5. public-method-coverage        - obligation-based ratchet over
  *                                      public SuperDoc methods +
  *                                      getters. For each member the
  *                                      AST computes which obligations
@@ -42,7 +52,7 @@
  *                                      on their own — that's why
  *                                      `search(text: string)` shipped
  *                                      under v1 of this gate.
- *   5. build                         - vite build + the postbuild
+ *   6. build                         - vite build + the postbuild
  *                                      validator chain
  *                                      (check-tsconfig-type-surface,
  *                                      ensure-types, audit-bundle,
@@ -53,29 +63,29 @@
  *                                      Skipped when `--skip-build` is
  *                                      passed (CI calls `pnpm run build`
  *                                      separately in its own step).
- *   6. consumer-typecheck-matrix     - packs superdoc + installs the
+ *   7. consumer-typecheck-matrix     - packs superdoc + installs the
  *                                      tarball into
  *                                      tests/consumer-typecheck/
  *                                      node_modules/, then runs every
  *                                      consumer scenario.
- *   7. deep-type-audit-supported-root - strict gate on the supported-
+ *   8. deep-type-audit-supported-root - strict gate on the supported-
  *                                      root public surface; fails on any
  *                                      `any` leak. Reuses the install
- *                                      from stage 6.
- *   8. package-shape                 - publint + attw against the packed
+ *                                      from stage 7.
+ *   9. package-shape                 - publint + attw against the packed
  *                                      manifest. Reuses the tarball
- *                                      from stage 6.
- *   9. export-snapshots              - super-editor / legacy / root
+ *                                      from stage 7.
+ *  10. export-snapshots              - super-editor / legacy / root
  *                                      no-growth export snapshots.
  *                                      Reuses the install.
- *  10. root-classification-closure   - no supported-root or legacy-root
+ *  11. root-classification-closure   - no supported-root or legacy-root
  *                                      export references an internal-
  *                                      candidate type in its public
  *                                      declared shape (SD-3212 A1b).
  *
- * Why stage 6 runs before 7-10: stage 6 packs `superdoc.tgz` and
- * installs the tarball into the consumer fixture once. Stages 7, 9,
- * and 10 reuse the installed fixture; stage 8 reuses the packed tarball
+ * Why stage 7 runs before 8-11: stage 7 packs `superdoc.tgz` and
+ * installs the tarball into the consumer fixture once. Stages 8, 10,
+ * and 11 reuse the installed fixture; stage 9 reuses the packed tarball
  * directly. Without this ordering each downstream stage would `--pack`
  * separately and multiply the work.
  *

@@ -115,7 +115,12 @@ export function pick(): unknown {
  */
 export const x = 1;
 `,
-    // Each tag is reported separately. @typedef + @property both fire.
+    // Only @typedef fires; nested @property tags inside the typedef
+    // are not surfaced as top-level tags by ts.getJSDocTags. That's
+    // intentional for the detector — the parent @typedef IS the
+    // violation, and the cleanup fix (convert to native interface)
+    // takes the @property lines with it. Field-level reporting is
+    // reviewer ergonomics, not detector correctness.
     expected: [{ tag: 'typedef', class: 'typedef-style' }],
   },
 

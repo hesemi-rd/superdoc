@@ -115,33 +115,81 @@ function listTsFiles(rootRel) {
 // ─── AST walk ─────────────────────────────────────────────────────────
 
 /**
+ * Walk up from a node to find the nearest named declaration ancestor.
+ * Used to anchor each violation to a stable enclosing-symbol name so
+ * the baseline key survives line shifts caused by edits elsewhere in
+ * the file.
+ *
+ * Returns '<inline>' when no named ancestor is found (e.g. inline
+ * `/** @type *​/` cast inside an anonymous expression at module scope).
+ */
+function enclosingSymbolName(node) {
+  let n = node;
+  while (n) {
+    // Direct .name on the node (FunctionDeclaration, MethodDeclaration,
+    // ClassDeclaration, InterfaceDeclaration, TypeAliasDeclaration,
+    // PropertyDeclaration / PropertySignature, GetAccessorDeclaration,
+    // EnumDeclaration, etc.).
+    if (n.name && ts.isIdentifier(n.name)) {
+      return String(n.name.escapedText);
+    }
+    // VariableStatement -> VariableDeclarationList -> VariableDeclaration[].
+    // Use the first declared name as the anchor.
+    if (ts.isVariableStatement(n) && n.declarationList && n.declarationList.declarations.length > 0) {
+      const d = n.declarationList.declarations[0];
+      if (d.name && ts.isIdentifier(d.name)) return String(d.name.escapedText);
+    }
+    if (ts.isVariableDeclaration(n) && n.name && ts.isIdentifier(n.name)) {
+      return String(n.name.escapedText);
+    }
+    n = n.parent;
+  }
+  return '<inline>';
+}
+
+/**
  * Walk a source file's AST and emit one violation per type-bearing
- * JSDoc tag. De-duped at the end by {file, pos, end}.
+ * JSDoc tag.
+ *
+ * Each violation's identity is the stable tuple
+ * `{file, symbol, tag, occurrenceIndex}`. `line` is captured for
+ * human-readable display only; it is NOT part of the baseline key
+ * because line numbers shift under unrelated edits and would produce
+ * spurious stale-plus-new pairs on the ratchet.
  */
 function findViolations(filePath, sourceText) {
   const sf = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, /* setParentNodes */ true);
   const findings = [];
-  const seen = new Set();
+  const seenPositions = new Set();
+  const occurrenceCounter = new Map();
 
   function visit(node) {
-    // ts.getJSDocTags returns the JSDoc tags attached to this node.
-    // We don't need to traverse the JSDoc comment itself — getting the
-    // tags from each declaration is enough.
     const tags = ts.getJSDocTags(node);
     if (tags && tags.length > 0) {
+      const symbol = enclosingSymbolName(node);
       for (const tag of tags) {
         const name = tag.tagName && tag.tagName.escapedText ? String(tag.tagName.escapedText) : '';
         const violation = classifyTag(name, tag);
         if (!violation) continue;
-        const key = `${tag.pos}:${tag.end}:${name}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        // Position de-dupe so the same tag surfaced via multiple parent
+        // walks counts once.
+        const positionKey = `${tag.pos}:${tag.end}:${name}`;
+        if (seenPositions.has(positionKey)) continue;
+        seenPositions.add(positionKey);
+        // Occurrence index within (symbol, tag) so multiple `@param`s
+        // on the same method are distinguished without depending on
+        // line numbers.
+        const counterKey = `${symbol}::${name}`;
+        const occurrenceIndex = occurrenceCounter.get(counterKey) || 0;
+        occurrenceCounter.set(counterKey, occurrenceIndex + 1);
         const { line } = sf.getLineAndCharacterOfPosition(tag.pos);
         findings.push({
           file: filePath,
           line: line + 1,
           tag: name,
           class: violation,
+          symbol,
+          occurrenceIndex,
         });
       }
     }
@@ -149,7 +197,12 @@ function findViolations(filePath, sourceText) {
   }
   visit(sf);
 
-  findings.sort((a, b) => (a.line - b.line) || a.tag.localeCompare(b.tag));
+  findings.sort(
+    (a, b) =>
+      a.symbol.localeCompare(b.symbol) ||
+      a.tag.localeCompare(b.tag) ||
+      a.occurrenceIndex - b.occurrenceIndex,
+  );
   return findings;
 }
 
@@ -179,16 +232,23 @@ function loadBaseline() {
 }
 
 function violationKey(v) {
-  return `${v.file}:${v.line}:${v.tag}`;
+  // Stable across line shifts and re-orderings of unrelated code.
+  // `line` is intentionally excluded: editing above a JSDoc block
+  // would otherwise produce one stale + one new entry for an
+  // unchanged violation, and the ratchet would be noisy.
+  return `${v.file}::${v.symbol}::${v.tag}::${v.class}::${v.occurrenceIndex}`;
 }
 
 function writeBaseline(violations) {
   const data = {
     $comment:
       'Auto-managed by packages/superdoc/scripts/check-jsdoc-hygiene-ts.cjs. ' +
-      'Each entry is "file:line:tag"; the gate grandfathers these and fails on net-new violations. ' +
-      'Refresh after intentional cleanup with --write. Goal is to drain to zero, then flip to ' +
-      '"zero allowed" in a separate PR. See packages/superdoc/scripts/type-hygiene.md.',
+      'Each entry is "file::enclosingSymbol::tagName::class::occurrenceIndex"; ' +
+      'line numbers are NOT part of the key, so the baseline survives unrelated ' +
+      'edits that shift line numbers. The gate grandfathers these and fails on ' +
+      'net-new violations. Refresh after intentional cleanup with --write. ' +
+      'Goal is to drain to zero, then flip to "zero allowed" in a separate PR. ' +
+      'See packages/superdoc/scripts/type-hygiene.md.',
     knownViolations: violations.map(violationKey).sort(),
   };
   fs.writeFileSync(BASELINE_PATH, JSON.stringify(data, null, 2) + '\n');
@@ -242,7 +302,7 @@ function main() {
     if (newViolations.length > 0) {
       console.log(`FAIL  ${newViolations.length} new type-bearing JSDoc tag(s) in .ts source:`);
       for (const v of newViolations.slice(0, 30)) {
-        console.log(`  - ${v.file}:${v.line}  @${v.tag}  [${v.class}]`);
+        console.log(`  - ${v.file}:${v.line}  @${v.tag}  on \`${v.symbol}\` [${v.class}]`);
       }
       if (newViolations.length > 30) {
         console.log(`  ... and ${newViolations.length - 30} more.`);
