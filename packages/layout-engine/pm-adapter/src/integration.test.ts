@@ -527,21 +527,67 @@ describe('PM → FlowBlock → Measure integration', () => {
     expect(xPositions.size).toBeGreaterThan(1);
   });
 
-  // SD-3269 follow-up: w:specVanish on the paragraph-mark rPr suppresses the
-  // paragraph break for display (ECMA-376 §17.3.2.36). Word renders the next
-  // paragraph as a continuation of the specVanish paragraph; the next
-  // paragraph's auto-generated marker is dropped along with its block.
-  it('fuses a specVanish paragraph forward into the next paragraph block', () => {
+  // SD-3269 fuse-forward matrix. Word 16.0 was tested against four minimal
+  // Word-native fixtures and only fuses when the paragraph-mark rPr carries
+  // `w:vanish`. The literal ECMA-376 reading would point to `w:specVanish`
+  // (§17.3.2.36) but Word ignores that as a fuse trigger in practice; matching
+  // Word is the rendering goal.
+
+  const buildTwoParagraphFixture = (firstRunProps: Record<string, unknown>) => ({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        attrs: { paragraphProperties: { runProperties: firstRunProps } },
+        content: [{ type: 'text', text: 'Head ' }],
+      },
+      {
+        type: 'paragraph',
+        attrs: {},
+        content: [{ type: 'text', text: 'Tail' }],
+      },
+    ],
+  });
+
+  // F1: w:vanish + w:specVanish on paragraph-mark rPr → Word fuses.
+  it('F1 fuses when paragraph-mark rPr has w:vanish and w:specVanish', () => {
+    const { blocks } = toFlowBlocks(buildTwoParagraphFixture({ vanish: true, specVanish: true }));
+    expect(blocks).toHaveLength(1);
+    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { suppressParagraphBreak?: boolean } };
+    expect(merged.attrs?.suppressParagraphBreak).toBeUndefined();
+    expect(merged.runs.map((r) => r.text ?? '').join('')).toBe('Head Tail');
+  });
+
+  // F2: w:vanish only → Word still fuses. The previous PR commit missed this
+  // because the trigger was specVanish; this case is the regression catch.
+  it('F2 fuses when paragraph-mark rPr has w:vanish without w:specVanish', () => {
+    const { blocks } = toFlowBlocks(buildTwoParagraphFixture({ vanish: true }));
+    expect(blocks).toHaveLength(1);
+    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { suppressParagraphBreak?: boolean } };
+    expect(merged.attrs?.suppressParagraphBreak).toBeUndefined();
+    expect(merged.runs.map((r) => r.text ?? '').join('')).toBe('Head Tail');
+  });
+
+  // F3: w:specVanish only (no w:vanish) → Word does NOT fuse. The previous PR
+  // commit incorrectly collapsed this; this case prevents the regression.
+  it('F3 does not fuse when paragraph-mark rPr has only w:specVanish', () => {
+    const { blocks } = toFlowBlocks(buildTwoParagraphFixture({ specVanish: true }));
+    expect(blocks).toHaveLength(2);
+    expect((blocks[0] as { runs: Array<{ text?: string }> }).runs.map((r) => r.text ?? '').join('')).toBe('Head ');
+    expect((blocks[1] as { runs: Array<{ text?: string }> }).runs.map((r) => r.text ?? '').join('')).toBe('Tail');
+  });
+
+  // F4: w:vanish on the numbering definition rPr (no paragraph-mark rPr at
+  // all) → Word does not fuse and hides only the auto marker. This is
+  // verified end-to-end against the original SD-3269 fixture; here we just
+  // confirm the absence of pPr/rPr does not trigger the post-process.
+  it('F4 does not fuse when there is no paragraph-mark rPr', () => {
     const fixture = {
       type: 'doc',
       content: [
         {
           type: 'paragraph',
-          attrs: {
-            paragraphProperties: {
-              runProperties: { vanish: true, specVanish: true },
-            },
-          },
+          attrs: {},
           content: [{ type: 'text', text: 'Head ' }],
         },
         {
@@ -551,29 +597,22 @@ describe('PM → FlowBlock → Measure integration', () => {
         },
       ],
     };
-
     const { blocks } = toFlowBlocks(fixture);
-
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0].kind).toBe('paragraph');
-    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
-    expect(merged.attrs?.specVanish).toBeUndefined();
-    const text = merged.runs.map((r) => r.text ?? '').join('');
-    expect(text).toBe('Head Tail');
+    expect(blocks).toHaveLength(2);
   });
 
-  it('chains multiple specVanish paragraphs into a single block', () => {
+  it('chains multiple fuse-forward paragraphs into a single block', () => {
     const fixture = {
       type: 'doc',
       content: [
         {
           type: 'paragraph',
-          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          attrs: { paragraphProperties: { runProperties: { vanish: true } } },
           content: [{ type: 'text', text: 'A ' }],
         },
         {
           type: 'paragraph',
-          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          attrs: { paragraphProperties: { runProperties: { vanish: true } } },
           content: [{ type: 'text', text: 'B ' }],
         },
         {
@@ -587,22 +626,21 @@ describe('PM → FlowBlock → Measure integration', () => {
     const { blocks } = toFlowBlocks(fixture);
 
     expect(blocks).toHaveLength(1);
-    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
-    expect(merged.attrs?.specVanish).toBeUndefined();
-    const text = merged.runs.map((r) => r.text ?? '').join('');
-    expect(text).toBe('A B C');
+    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { suppressParagraphBreak?: boolean } };
+    expect(merged.attrs?.suppressParagraphBreak).toBeUndefined();
+    expect(merged.runs.map((r) => r.text ?? '').join('')).toBe('A B C');
   });
 
-  // A bare paragraph (no successor) keeps its specVanish flag — there's
-  // nothing to fuse into. Importer round-trip preservation still works since
-  // pm-adapter only re-emits the flag, it does not invent it.
-  it('leaves a trailing specVanish paragraph untouched when there is no successor', () => {
+  // A bare paragraph with paragraph-mark vanish and no successor keeps its
+  // flag set: nothing to fuse into, but importer round-trip preservation
+  // still surfaces the source intent.
+  it('leaves a trailing fuse-forward paragraph untouched when there is no successor', () => {
     const fixture = {
       type: 'doc',
       content: [
         {
           type: 'paragraph',
-          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          attrs: { paragraphProperties: { runProperties: { vanish: true } } },
           content: [{ type: 'text', text: 'Alone' }],
         },
       ],
@@ -611,8 +649,8 @@ describe('PM → FlowBlock → Measure integration', () => {
     const { blocks } = toFlowBlocks(fixture);
 
     expect(blocks).toHaveLength(1);
-    const block = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
-    expect(block.attrs?.specVanish).toBe(true);
+    const block = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { suppressParagraphBreak?: boolean } };
+    expect(block.attrs?.suppressParagraphBreak).toBe(true);
     expect(block.runs.map((r) => r.text ?? '').join('')).toBe('Alone');
   });
 
