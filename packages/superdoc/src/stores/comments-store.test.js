@@ -512,6 +512,15 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+
+    // SD-673: pin the exact key set of the comments-update payload.
+    // SuperDocCommentsUpdatePayload declares { type, comment?, changes? };
+    // the objectContaining assertion above would not catch a regression
+    // to the older { data: ... } shape or an extra field leaking in.
+    const [, payload] = superdoc.emit.mock.calls[0];
+    expect(Object.keys(payload).sort()).toEqual(['comment', 'type']);
+    expect(typeof payload.type).toBe('string');
+    expect(payload.comment).toEqual({ commentId: 'change-1' });
   });
 
   it('reopens resolved tracked change comments on update events', () => {
