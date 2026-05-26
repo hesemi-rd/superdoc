@@ -113,6 +113,53 @@ function addCachedResultRunToYjsCrossReference(ydoc: YDoc): void {
   crossReferenceElement.insert(0, [run]);
 }
 
+function collectCitations(editor: Editor) {
+  const citations: Array<{ pos: number; attrs: Record<string, unknown>; textContent: string }> = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'citation') {
+      citations.push({ pos, attrs: node.attrs, textContent: node.textContent });
+    }
+    return true;
+  });
+  return citations;
+}
+
+function createCitationPmDoc(editor: Editor) {
+  const { schema } = editor;
+  return schema.node('doc', null, [
+    schema.node('paragraph', null, [schema.text('Hello I am a citation reference: ')]),
+    schema.node('paragraph', null, [
+      schema.text('Source: '),
+      schema.nodes.citation.create({
+        instruction: 'CITATION Smith2024 \\l 1033',
+        sourceIds: ['Smith2024'],
+        resolvedText: '(Smith, 2024)',
+        marksAsAttrs: [{ type: 'textStyle', attrs: {} }],
+      }),
+    ]),
+  ]);
+}
+
+function addCachedResultRunToYjsCitation(ydoc: YDoc): void {
+  const citationElement = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), 'citation');
+  if (!citationElement) {
+    throw new Error('Expected seeded Yjs fragment to contain a citation element.');
+  }
+
+  const run = new XmlElement('run');
+  run.setAttribute('runProperties', {
+    rFonts: { ascii: 'Aptos', hAnsi: 'Aptos', cs: 'Arial' },
+    fontSize: 24,
+    fontSizeCs: 24,
+  });
+  run.setAttribute('runPropertiesInlineKeys', ['fontFamily', 'cs']);
+
+  const text = new XmlText();
+  text.insert(0, '(Smith, 2024)');
+  run.insert(0, [text]);
+  citationElement.insert(0, [run]);
+}
+
 describe('Editor collaboration seeding', () => {
   let centeredBuffer: Buffer;
 
@@ -206,6 +253,58 @@ describe('Editor collaboration seeding', () => {
       const postHydrationSharedXml = ydoc.getXmlFragment('supereditor').toString();
       expect(postHydrationSharedXml).toContain('crossreference');
       expect(postHydrationSharedXml).toContain('REF _Ref228977094');
+    } finally {
+      if (seedEditor.lifecycleState === 'ready') {
+        seedEditor.close();
+      }
+      if (observerEditor.lifecycleState === 'ready') {
+        observerEditor.close();
+      }
+      seedEditor.destroy();
+      observerEditor.destroy();
+      ydoc.destroy();
+    }
+  });
+
+  it('preserves citation nodes when a second collaboration client hydrates from the room', async () => {
+    const observerProvider = createProviderStub();
+    observerProvider.synced = true;
+    observerProvider.isSynced = true;
+    const ydoc = new YDoc();
+    const seedEditor = createTestEditor();
+    const observerEditor = createTestEditor({
+      ydoc,
+      collaborationProvider: observerProvider,
+    });
+
+    try {
+      await seedEditor.open(undefined, { mode: 'docx' });
+      const citationDoc = createCitationPmDoc(seedEditor);
+      seedEditor.dispatch(seedEditor.state.tr.replaceWith(0, seedEditor.state.doc.content.size, citationDoc));
+
+      const seededCitations = collectCitations(seedEditor);
+      expect(seededCitations).toHaveLength(1);
+      expect(seededCitations[0].attrs.resolvedText).toBe('(Smith, 2024)');
+
+      seedEditorStateToYDoc(seedEditor, ydoc);
+      addCachedResultRunToYjsCitation(ydoc);
+      expect(ydoc.getXmlFragment('supereditor').toString()).toContain('citation');
+      expect(ydoc.getXmlFragment('supereditor').toString()).toContain('CITATION Smith2024');
+
+      await observerEditor.open(undefined, {
+        mode: 'docx',
+        fragment: ydoc.getXmlFragment('supereditor'),
+        isNewFile: false,
+      });
+
+      observerProvider.emit('synced', true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const observerCitations = collectCitations(observerEditor);
+      expect(observerCitations).toHaveLength(1);
+      expect(observerCitations[0].attrs.instruction).toBe('CITATION Smith2024 \\l 1033');
+      expect(observerCitations[0].attrs.sourceIds).toEqual(['Smith2024']);
+      expect(observerCitations[0].attrs.resolvedText).toBe('(Smith, 2024)');
     } finally {
       if (seedEditor.lifecycleState === 'ready') {
         seedEditor.close();
