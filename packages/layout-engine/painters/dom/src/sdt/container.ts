@@ -36,6 +36,7 @@ export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined)
   scope: 'inline' | 'block';
   alias?: string | null;
   lockMode?: StructuredContentLockMode;
+  appearance?: string | null;
 } {
   return (
     sdt !== null && sdt !== undefined && typeof sdt === 'object' && 'type' in sdt && sdt.type === 'structuredContent'
@@ -81,6 +82,9 @@ export function shouldRenderSdtContainerChrome(
 ): boolean {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
   if (!metadata) return false;
+  if (isStructuredContentMetadata(metadata) && metadata.appearance === 'hidden') {
+    return false;
+  }
 
   const containerKey = getSdtContainerKey(sdt, containerSdt);
   const ancestorKeys = [options?.ancestorContainerKey, ...(options?.ancestorContainerKeys ?? [])];
