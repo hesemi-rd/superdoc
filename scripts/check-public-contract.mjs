@@ -252,17 +252,6 @@ const stages = [
       'Closure gate: no supported-root or legacy-root export references an ' +
       'internal-candidate type in its public declared shape (SD-3212 A1b).',
   },
-  {
-    name: 'js-contract-owners-report',
-    cwd: REPO_ROOT,
-    cmd: 'node',
-    args: ['packages/superdoc/scripts/report-js-contract-owners.cjs'],
-    blurb:
-      'Inventory of .js files that own emitted public .d.ts in both packages, ' +
-      'classified against the existing check-jsdoc state (CHECKED_FILES, ' +
-      '// @ts-check, allowlist, debt snapshot). Report-only (always exits 0); ' +
-      'promotion to a strict no-growth gate is a separate follow-up.',
-  },
 ];
 
 const HR = '='.repeat(72);

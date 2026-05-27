@@ -23,8 +23,9 @@
  *     `packages/super-editor/package.json` for typed exports
  *   - `packages/superdoc/scripts/jsdoc-debt-snapshot.json`
  *   - `packages/superdoc/scripts/jsdoc-allowlist.cjs`
- *   - `CHECKED_FILES` (inlined from `check-jsdoc.cjs`; kept in sync by
- *     the explicit `KNOWN_CHECKED_FILES_REFERENCE` comment below)
+ *   - `packages/superdoc/scripts/jsdoc-checked-files.cjs` — the same
+ *     shared module `check-jsdoc.cjs` reads. Zero duplication; the
+ *     two consumers cannot drift.
  *
  * Note on scope: the existing `check-jsdoc.cjs` ratchet walks from
  * `superdoc`'s entry points and reaches into super-editor JS via
@@ -48,17 +49,10 @@ const superEditorRoot = path.resolve(repoRoot, 'packages/super-editor');
 const DEBT_SNAPSHOT_PATH = path.join(superdocRoot, 'scripts/jsdoc-debt-snapshot.json');
 const ALLOWLIST_PATH = path.join(superdocRoot, 'scripts/jsdoc-allowlist.cjs');
 
-// Mirrors CHECKED_FILES in `check-jsdoc.cjs`. Kept inline so this script
-// has zero runtime dependency on check-jsdoc.cjs's internals. If
-// check-jsdoc adds/removes entries, update this constant.
-const KNOWN_CHECKED_FILES_REFERENCE = [
-  'packages/superdoc/src/helpers/schema-introspection.js',
-  'packages/superdoc/src/composables/use-find-replace.js',
-  'packages/superdoc/src/composables/use-password-prompt.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/addMarkStep.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markDeletion.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markInsertion.js',
-];
+// Shared with `check-jsdoc.cjs`. Edits to the curated set go in the
+// shared module so both consumers stay in sync; this script does not
+// own the list.
+const { CHECKED_FILES } = require('./jsdoc-checked-files.cjs');
 
 function loadDebtSnapshot() {
   if (!fs.existsSync(DEBT_SNAPSHOT_PATH)) return new Set();
@@ -264,7 +258,7 @@ function classify(source, checkedSet, allowlistSet, debtSet) {
 
 // ─── main ────────────────────────────────────────────────────────────
 
-const checkedSet = new Set(KNOWN_CHECKED_FILES_REFERENCE);
+const checkedSet = new Set(CHECKED_FILES);
 const allowlistSet = loadAllowlist();
 const debtSet = loadDebtSnapshot();
 
