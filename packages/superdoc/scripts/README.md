@@ -146,14 +146,16 @@ what an actual consumer would see — not the workspace source.
 | `package-shape-gate.mjs` | External package-shape linters (publint + attw) against the packed tarball. | Catches condition ordering, masquerading exports, missing field declarations. |
 | `check-root-classification-closure.mjs` | Asserts no `supported-root` or `legacy-root` export references an `internal-candidate` symbol in its public declared type. | Closure rule from SD-3212. |
 | `check-public-method-coverage.mjs` | Strict-zero obligation gate over public `SuperDoc` methods + getters. For each member the AST computes which obligations are meaningful (`parameters`, `returns`, or `call`); the gate fails on any unmet obligation. No grandfathered debt snapshot, no `--write`. Catches the `search(text: string)` regression class — call sites do NOT satisfy `parameters`/`returns` on their own. | Allowlist at `public-method-coverage-allowlist.cjs` is the only escape hatch (intentionally non-consumer-callable members; each entry validated: key must match a real member, value must be a non-empty reason). |
+| `report-js-contract-owners.cjs` | JS contract-owner audit (SD-673, report-only). For both `superdoc` and `@superdoc/super-editor` packages: walks every typed export, follows relative / self-package edges through the emitted `.d.ts` forest, resolves each reachable declaration to its source via the companion `.d.ts.map` sourcemap, and classifies `.js` owners against the existing `check-jsdoc.cjs` state (`CHECKED_FILES`, `// @ts-check`, allowlist, debt snapshot). Output is the count per category plus the list of UNACCOUNTED `.js` owners — public-surface JS source with no `// @ts-check` directive and no tracking entry. | Always exits 0; informational. Survey input for follow-up types-only extraction / `@ts-check` adoption. Once UNACCOUNTED stabilizes at zero per package, a follow-up PR can promote it to a no-growth ratchet. |
 
-Six of these run as wrapper stages of `check:public:superdoc`.
+Seven of these run as wrapper stages of `check:public:superdoc`.
 `public-method-coverage` runs alongside the cheap policy gates
 (`contract-tiers-test`, `contract-tiers`, `jsdoc-ratchet`,
 `jsdoc-hygiene-ts-test`, `jsdoc-hygiene-ts`) before `build`. The other
-five run after `build`:
+six run after `build`:
 `consumer-typecheck-matrix`, `deep-type-audit-supported-root`,
-`package-shape`, `export-snapshots`, `root-classification-closure`.
+`package-shape`, `export-snapshots`, `root-classification-closure`,
+`js-contract-owners-report` (report-only; always exits 0).
 `consumer-typecheck-matrix` packs `superdoc.tgz` and installs it into
 the consumer fixture. The rest reuse what matrix produced:
 `deep-type-audit-supported-root`, `export-snapshots`, and
