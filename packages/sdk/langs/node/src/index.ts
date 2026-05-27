@@ -253,11 +253,15 @@ export {
   getSystemPromptForProvider,
   getToolCatalog,
   listTools,
+  DEFAULT_PRESET,
+  getPreset,
+  listPresets,
 } from './tools.js';
 export type {
   AnthropicSystemPrompt,
   CacheStrategy,
   SystemPromptForProviderResult,
+  ToolCatalog,
   ToolChooserInput,
   ToolProvider,
 } from './tools.js';
