@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { base64ToFile, getBase64FileMeta } from './handleBase64.js';
 
 const base64ForPayload = (payload, mime = 'image/png') =>
@@ -21,6 +23,16 @@ describe('handleBase64', () => {
     expect(file.type).toBe('image/png');
     expect(file.name).toMatch(/^image-\d+\.png$/);
     expect(file.size).toBe(Buffer.byteLength(payload));
+  });
+
+  it('uses shared url-validation helpers directly instead of converter helpers', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/editors/v1/extensions/image/imageHelpers/handleBase64.js'),
+      'utf8',
+    );
+
+    expect(source).toContain("from '@superdoc/url-validation'");
+    expect(source).not.toContain("from '@converter/helpers/mediaHelpers.js'");
   });
 
   it('falls back to Buffer decoding when atob is unavailable', () => {

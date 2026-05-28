@@ -1,8 +1,29 @@
 // @ts-check
-import { getDataUriMetadata, tryDecodeDataUriText } from '@converter/helpers/mediaHelpers.js';
+import { getDataUriMetadata, tryDecodeDataUriText } from '@superdoc/url-validation';
 import { simpleStringHash } from '@core/utilities/hash.js';
 
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
+
+const MIME_TYPE_TO_EXTENSION = {
+  'image/svg+xml': 'svg',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/tiff': 'tif',
+  'image/tif': 'tif',
+  'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico',
+  'image/ico': 'ico',
+};
+
+const getImageExtensionFromMimeType = (mimeType) => {
+  const normalizedMimeType = String(mimeType || '').toLowerCase();
+  if (MIME_TYPE_TO_EXTENSION[normalizedMimeType]) return MIME_TYPE_TO_EXTENSION[normalizedMimeType];
+
+  const [type, subtype] = normalizedMimeType.split('/');
+  if (type !== 'image' || !subtype) return null;
+
+  return subtype;
+};
 
 /**
  * Decodes a base64-encoded string into a binary string.
@@ -48,7 +69,7 @@ const extractBase64Meta = (dataUri) => {
   if (binaryString == null) return null;
 
   const hash = simpleStringHash(binaryString);
-  const extension = metadata?.extension || 'bin';
+  const extension = getImageExtensionFromMimeType(metadata?.mimeType) || 'bin';
   const filename = `image-${hash}.${extension}`;
 
   return { mimeType, binaryString, filename, isBase64 };
