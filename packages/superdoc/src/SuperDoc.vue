@@ -57,6 +57,7 @@ import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracke
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 import {
   DEFAULT_COMMENTS_DISPLAY_MODE,
+  DEFAULT_DOCUMENT_VISIBLE_MIN_WIDTH_PX,
   RIGHT_CLICK_COMMENT_SUPPRESS_MS,
   VALID_COMMENTS_DISPLAY_MODES,
 } from './helpers/comment-small-screen.js';
@@ -1320,6 +1321,38 @@ const showActiveSelection = computed(() => {
 watch(showCommentsSidebar, (value) => {
   proxy.$superdoc.broadcastSidebarToggle(value);
 });
+
+// Emit layout-change event when container width changes.
+// Capture base document width once at 100% zoom to avoid feedback loops.
+let baseDocumentWidth = null;
+let lastEmittedFitZoom = null;
+
+const emitLayoutChange = () => {
+  const containerWidth = superdocContainerWidth.value;
+  if (!proxy.$superdoc || containerWidth <= 0) return;
+
+  // Capture base width once on first call (document at 100% zoom)
+  if (baseDocumentWidth === null) {
+    const docEl = superdocRoot.value?.querySelector('.superdoc__document');
+    const measured = docEl?.clientWidth || docEl?.getBoundingClientRect?.().width || 0;
+    baseDocumentWidth = measured > 0 ? measured : DEFAULT_DOCUMENT_VISIBLE_MIN_WIDTH_PX;
+  }
+
+  const rawFitZoom = (containerWidth / baseDocumentWidth) * 100;
+  const fitZoom = Math.round(rawFitZoom);
+
+  // Only emit if fitZoom changed
+  if (fitZoom === lastEmittedFitZoom) return;
+  lastEmittedFitZoom = fitZoom;
+
+  proxy.$superdoc.emit('layout-change', {
+    containerWidth,
+    documentWidth: baseDocumentWidth,
+    fitZoom,
+  });
+};
+
+watch(superdocContainerWidth, emitLayoutChange);
 
 /**
  * Scroll the page to a given commentId

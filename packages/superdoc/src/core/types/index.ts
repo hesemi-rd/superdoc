@@ -1538,6 +1538,19 @@ export type SuperDocExceptionPayload =
   | SuperDocExceptionRestorePayload
   | SuperDocExceptionEditorPayload;
 
+/**
+ * Payload emitted when container dimensions change. Useful for implementing
+ * fit-to-container zoom behavior.
+ */
+export interface SuperDocLayoutChangePayload {
+  /** Current container width in pixels. */
+  containerWidth: number;
+  /** Measured document/page width in pixels. */
+  documentWidth: number;
+  /** Calculated zoom to fit document in available width (unclamped). User should clamp to their preferred min/max. */
+  fitZoom: number;
+}
+
 export interface Config {
   /** The ID of the SuperDoc. */
   superdocId?: string;

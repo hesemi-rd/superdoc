@@ -924,6 +924,18 @@ const init = async () => {
     currentZoom.value = zoom;
   });
 
+  superdoc.value?.on('layout-change', ({ fitZoom }) => {
+    // Clamp zoom between your min/max bounds
+    console.log('[layout-change]', fitZoom);
+    if (fitZoom < 50) {
+      superdoc.value.setZoom(50);
+    } else if (fitZoom > 200) {
+      superdoc.value.setZoom(200);
+    } else {
+      superdoc.value.setZoom(fitZoom);
+    }
+  });
+
   window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;

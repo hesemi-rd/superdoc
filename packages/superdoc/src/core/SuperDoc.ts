@@ -82,6 +82,7 @@ import type {
   SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocLayoutChangePayload,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
   SuperDocState,
@@ -151,6 +152,7 @@ interface SuperDocEventMap {
   'whiteboard:enabled': [boolean];
   'whiteboard:tool': [string];
   exception: [SuperDocExceptionPayload];
+  'layout-change': [SuperDocLayoutChangePayload];
 }
 // Notes on the event map above:
 //
