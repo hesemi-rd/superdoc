@@ -1,4 +1,4 @@
-const RUN_LEVEL_WRAPPERS = new Set(['w:hyperlink', 'w:ins', 'w:del']);
+const RUN_LEVEL_WRAPPERS = new Set(['w:hyperlink', 'w:ins', 'w:del', 'w:smartTag']);
 
 /**
  * Convert SDT child elements into Word run elements.
