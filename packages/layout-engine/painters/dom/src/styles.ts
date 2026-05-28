@@ -527,6 +527,7 @@ const SDT_CONTAINER_STYLES = `
   border-radius: 4px;
   background-color: transparent;
   position: relative;
+  z-index: 0;
   --sd-sdt-chrome-left: 0px;
   --sd-sdt-chrome-width: 100%;
   --sd-sdt-chrome-bottom-extension: 0px;
@@ -542,6 +543,7 @@ const SDT_CONTAINER_STYLES = `
   border-radius: inherit;
   background-color: var(--sd-content-controls-block-bg, transparent);
   box-sizing: border-box;
+  z-index: -1;
   pointer-events: none;
 }
 
@@ -555,6 +557,7 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid transparent;
   border-radius: inherit;
   box-sizing: border-box;
+  z-index: 1;
   pointer-events: none;
 }
 
