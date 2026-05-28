@@ -1091,7 +1091,7 @@ export interface Modules {
   contentControls?: {
     /** Built-in SDT chrome rendering mode. */
     chrome?: 'default' | 'none';
-  } & Record<string, unknown>;
+  };
   /**
    * Comments module configuration (false to disable). The named fields below
    * are typed for IDE help; the runtime spreads the entire object through the

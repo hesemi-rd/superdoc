@@ -68,11 +68,12 @@ const config: Config = {
     },
 
     // Documented field: built-in SDT chrome mode (SD-3159). A consumer must be
-    // able to set the union value and get IDE help on it; the pass-through
-    // index signature accepts forwarded extras like every other module config.
+    // able to set the union value and get IDE help on it. Unlike the other
+    // module configs in this fixture, contentControls is exact (no pass-through
+    // index signature): it has a single real runtime option, so an unknown key
+    // is a typo to catch, not a forwarded setting.
     contentControls: {
       chrome: 'none',
-      forwardedFlag: true,
     },
 
     ai: {
