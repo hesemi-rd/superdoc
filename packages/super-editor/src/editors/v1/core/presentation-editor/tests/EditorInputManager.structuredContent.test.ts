@@ -189,6 +189,7 @@ describe('EditorInputManager structured content clicks', () => {
   let getActiveEditor: Mock;
   let getEditor: Mock;
   let mockHitTestTable: Mock;
+  let scheduleSelectionUpdate: Mock;
 
   function mountWithDoc(
     mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'emptyInlineSdt' | 'nestedInlineInBlock',
@@ -277,7 +278,7 @@ describe('EditorInputManager structured content clicks', () => {
         pageIndex: 0,
         pageLocalY: clientY,
       })),
-      scheduleSelectionUpdate: vi.fn(),
+      scheduleSelectionUpdate: (scheduleSelectionUpdate = vi.fn()),
       updateSelectionDebugHud: vi.fn(),
       hitTestTable: (mockHitTestTable = vi.fn(() => null)),
     });
@@ -522,6 +523,7 @@ describe('EditorInputManager structured content clicks', () => {
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(1);
     expect(mockEditor.view.dispatch).toHaveBeenCalledTimes(1);
+    expect(scheduleSelectionUpdate).toHaveBeenCalledTimes(1);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 

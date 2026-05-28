@@ -2169,6 +2169,7 @@ export class EditorInputManager {
           editor.view?.dispatch(tr);
         }
 
+        this.#callbacks.scheduleSelectionUpdate?.();
         this.#focusEditor();
         return true;
       }
