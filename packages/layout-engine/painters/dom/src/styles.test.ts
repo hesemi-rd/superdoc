@@ -254,13 +254,35 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain(
       '.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode::after',
     );
-    // Hover/group-hover border and background.
+    // Direct hover (single-fragment) border and background.
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::after');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::before');
+    // Group hover (multi-fragment, JS-coordinated) border and background.
     expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::after');
     expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before');
     // Lock-hover background lives on ::before; must be suppressed too.
     expect(cssText).toContain(
       '.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before',
     );
+  });
+
+  it('declares chrome-none block pseudo suppression after the chrome-showing rules', () => {
+    // The hover/group-hover suppression selectors are the same specificity as
+    // the rules they override, so source order is load-bearing: the chrome-none
+    // block must come after the last chrome-showing block pseudo rule (the
+    // lock-hover ::before background) or hover chrome leaks under chrome-none.
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    const lastChromeShowing = cssText.indexOf(
+      '.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before',
+    );
+    const chromeNoneSuppression = cssText.indexOf(
+      '.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before',
+    );
+    expect(lastChromeShowing).toBeGreaterThan(-1);
+    expect(chromeNoneSuppression).toBeGreaterThan(lastChromeShowing);
   });
 });
 
