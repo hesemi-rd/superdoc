@@ -101,6 +101,13 @@ export type {
 import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  getSdtContainerKey,
+  getSdtContainerKeyForBlock,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  isSdtContainerMetadata,
+} from './sdt-container.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -257,6 +264,8 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  overlapParentId?: string;
+  relationship?: 'parent' | 'child' | 'standalone';
   /**
    * Internal story key identifying which content story owns this tracked
    * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
@@ -356,6 +365,8 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /** All tracked-change layers on this run, preserving overlap order. */
+  trackedChanges?: TrackedChangeMeta[];
   /**
    * Run-level bidi signals preserved from the source DOCX (run rtl flag,
    * embedding/override directions). Direction-only - script formatting lives
@@ -497,6 +508,7 @@ export type BreakRun = {
   pmEnd?: number;
   sdt?: SdtMetadata;
   trackedChange?: TrackedChangeMeta;
+  trackedChanges?: TrackedChangeMeta[];
 };
 
 /**
