@@ -279,7 +279,7 @@ export const BlockNode = Extension.create({
 
           const { tr } = newState;
           let changed = false;
-          const updatedPositions = new Set();
+          const visitedPositions = new Set();
 
           // Skip sdBlockRev increment for Y.js-origin transactions to prevent
           // an infinite feedback loop in collaboration: Tab A increments rev →
@@ -370,7 +370,8 @@ export const BlockNode = Extension.create({
 
             const updateNodeAt = (node, pos) => {
               if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
-              if (updatedPositions.has(pos)) return;
+              if (visitedPositions.has(pos)) return;
+              visitedPositions.add(pos);
               const nextAttrs = { ...node.attrs };
               let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenBlockIds);
               if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
@@ -379,7 +380,6 @@ export const BlockNode = Extension.create({
               }
               if (nodeChanged) {
                 applyNodeAttrs(tr, node, pos, nextAttrs);
-                updatedPositions.add(pos);
                 changed = true;
               }
             };
