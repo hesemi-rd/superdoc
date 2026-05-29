@@ -321,7 +321,12 @@ export function caretLocation(snap: InlineSdtSnapshot, range: InlineSdtRange): C
 
 export type BodyMutation = 'none' | 'text-changed' | 'structure-changed';
 
-/** Whole-document body text / paragraph change between two snapshots (excludes CC lifecycle). */
+/**
+ * Whole-document body text / paragraph change between two snapshots. Compares
+ * the whole `doc.textContent`, so it INCLUDES changes to the SDT's own content
+ * (e.g. emptying it reads as text-changed). It excludes only wrapper lifecycle
+ * (existence / empty-state) - that is the contentControlLifecycle axis.
+ */
 export function bodyMutation(before: InlineSdtSnapshot, after: InlineSdtSnapshot): BodyMutation {
   if (before.paragraphCount !== after.paragraphCount) return 'structure-changed';
   if (before.docText !== after.docText) return 'text-changed';
