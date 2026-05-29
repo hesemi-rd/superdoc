@@ -1087,6 +1087,11 @@ export interface CanPerformPermissionParams {
 
 /** Modules registered with the SuperDoc instance. */
 export interface Modules {
+  /** Content controls module configuration. */
+  contentControls?: {
+    /** Built-in SDT chrome rendering mode. */
+    chrome?: 'default' | 'none';
+  };
   /**
    * Comments module configuration (false to disable). The named fields below
    * are typed for IDE help; the runtime spreads the entire object through the
@@ -1145,7 +1150,7 @@ export interface Modules {
           /** Active border color for format change highlight. */
           formatBorder?: string;
         };
-        /** Comments/track-changes UI display policy. */
+        /** Comments/track-changes UI display policy for responsive comment surfaces. */
         displayMode?: 'auto' | 'sidebar' | 'inline';
         /** CSS selector for an explicit width measurement target in auto mode. */
         compactMeasurementSelector?: string;
