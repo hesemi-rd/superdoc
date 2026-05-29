@@ -165,4 +165,55 @@ describe('Editor content-control events', () => {
     editor.destroy();
   });
 
+  it('reports pointer source for a non-click selection following a recent pointerDown', async () => {
+    // initTestEditor builds the editor without deferDocumentLoad, i.e. the
+    // default #init path PresentationEditor uses. This guards that the pointer
+    // timestamp listener is wired there (not only on #registerEventListeners),
+    // so source is 'pointer' even when the selection carries no uiEvent:'click'.
+    const editor = makeEditor();
+    await seedTwoInlineSdts(editor);
+    const sdts = findInlineSdts(editor);
+    selectAt(editor, outsidePos(editor)); // baseline
+
+    const focus = vi.fn();
+    editor.on('contentControlFocus', focus);
+
+    // Simulate a pointer interaction, then a selection change with NO click meta.
+    editor.emit('pointerDown', { editor, event: {} as PointerEvent });
+    selectAt(editor, sdts[0].inside);
+
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(focus.mock.calls[0][0]).toMatchObject({ active: { id: sdts[0].id }, source: 'pointer' });
+
+    editor.destroy();
+  });
+
+  it('emits focus for a block-scope SDT (structuredContentBlock)', async () => {
+    const editor = makeEditor();
+    await Promise.resolve(editor.doc.insert({ value: 'Block clause body text' }));
+    // kind: 'block' wraps the block containing the current selection.
+    const r = await Promise.resolve(
+      editor.doc.create.contentControl({ kind: 'block', controlType: 'richText', tag: 'cc-block', alias: 'Block Control' }),
+    );
+    expect(r.success).toBe(true);
+
+    let block = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (!block && node.type.name === 'structuredContentBlock') block = { id: node.attrs.id, inside: pos + 2 };
+      return true;
+    });
+    expect(block).toBeTruthy();
+    if (!block) return;
+
+    const focus = vi.fn();
+    editor.on('contentControlFocus', focus);
+    selectAt(editor, 1); // out
+    selectAt(editor, block.inside); // into the block control
+
+    const blockFocus = focus.mock.calls.map((c) => c[0]).find((p) => p.active?.id === block.id);
+    expect(blockFocus).toBeTruthy();
+    expect(blockFocus.active).toMatchObject({ id: block.id, scope: 'block', controlType: 'richText' });
+
+    editor.destroy();
+  });
 });

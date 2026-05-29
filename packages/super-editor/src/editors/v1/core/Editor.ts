@@ -1097,11 +1097,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
+  }
+
+  /**
+   * Record the most recent pointerDown timestamp for content-control event
+   * source detection. Registered on every init path (#registerEventListeners,
+   * #init, #initRichText) so source detection works regardless of
+   * deferDocumentLoad - the default PresentationEditor path uses #init /
+   * #initRichText, not #registerEventListeners.
+   */
+  #trackContentControlPointer(): void {
     this.on('pointerDown', () => {
       this.#lastPointerDownAt = Date.now();
     });
-    this.on('pointerUp', this.options.onPointerUp!);
-    this.on('rightClick', this.options.onRightClick!);
   }
 
   /**
@@ -1518,6 +1529,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
@@ -1597,6 +1609,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
