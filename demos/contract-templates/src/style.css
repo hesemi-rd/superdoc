@@ -276,9 +276,13 @@ input:focus {
 /* Smart-tag token look, shared by the in-editor inline SDT and the Smart-tags
    palette chips so a sidebar tag and the field it inserts read as one object. */
 :root {
-  --tag-border: var(--demo-accent);
-  --tag-bg: var(--demo-accent-soft);
-  --tag-fg: var(--demo-accent);
+  /* Smart tags get their own amber identity (distinct from the blue UI accent),
+     echoing a typical template-variable palette. One token set, applied to both
+     the palette chip and the painted in-editor field. */
+  --tag-color: var(--sd-color-amber-600, #d97706);
+  --tag-border: var(--tag-color);
+  --tag-bg: color-mix(in srgb, var(--tag-color) 12%, transparent);
+  --tag-fg: var(--sd-color-amber-700, #b45309);
   --tag-radius: 6px;
 }
 /* Inline smart fields: token pill (painted SDT wrapper under chrome:'none'). */

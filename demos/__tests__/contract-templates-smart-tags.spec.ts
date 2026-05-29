@@ -55,3 +55,44 @@ test('clicking a Smart-tags chip inserts a matching inline SDT at the caret', as
     .poll(async () => (await textsForTag()).filter((x) => x === token).length, { timeout: 6_000 })
     .toBeGreaterThan(before.filter((x) => x === token).length);
 });
+
+test('clicking an in-editor smart-field token highlights its sidebar chip', async ({ page }) => {
+  test.skip(process.env.DEMO !== 'contract-templates', 'contract-templates demo only');
+
+  await page.route('**/ingest.superdoc.dev/**', (r) =>
+    r.fulfill({ status: 204, contentType: 'application/json', body: '{}' }),
+  );
+  await page.goto('/');
+  await page.waitForFunction(
+    () => (window as any).__demo?.state?.ui?.contentControls?.getSnapshot()?.items?.length > 0,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForSelector('[data-tag-key]');
+
+  const sel = '.superdoc-structured-content-inline[data-sdt-tag*="smartField"]';
+  await page.waitForSelector(sel);
+  // The key of the first painted inline smart-field token in the document.
+  const key = await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    try {
+      return JSON.parse(el?.getAttribute('data-sdt-tag') ?? '{}').key ?? null;
+    } catch {
+      return null;
+    }
+  }, sel);
+  expect(key).toBeTruthy();
+
+  // Click the token in the document; its sidebar chip should become active.
+  await page.locator(sel).first().click();
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          (k) => document.querySelector(`.smart-tag[data-tag-key="${k}"]`)?.classList.contains('is-active') ?? false,
+          key,
+        ),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+});

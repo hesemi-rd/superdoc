@@ -212,10 +212,14 @@ const state = {
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
   expandedClause: null as ClauseId | null,
+  /** Smart-tag chip mirrored as active when the caret is in a matching field. */
+  activeTagKey: null as FieldKey | null,
   /** UI controller; created in `initialize`, disposed by `teardown`. */
   ui: null as ReturnType<typeof createSuperDocUI> | null,
   /** Field-chip detach handle; created in `initialize`, called by `teardown`. */
   fieldChipTeardown: null as (() => void) | null,
+  /** Detaches the document -> palette highlight listeners. */
+  smartTagSyncTeardown: null as (() => void) | null,
 };
 
 const statusEl = qs<HTMLElement>('#status');
@@ -299,6 +303,25 @@ async function initialize(instance: DemoSuperDoc): Promise<void> {
     valueFor: (key) => state.values[key as FieldKey],
   });
 
+  // Document -> palette: clicking a smart-field token in the editor highlights
+  // its chip in the sidebar (dogfoods content-control:click). Cleared on blur.
+  const onTokenClick = ({ target }: { target: { tag?: string } }) => {
+    const parsed = target?.tag ? parseTag(target.tag) : null;
+    state.activeTagKey = parsed?.kind === 'smartField' ? (parsed.key as FieldKey) : null;
+    highlightActiveTag();
+  };
+  const onActiveChange = ({ active }: { active: { tag?: string } | null }) => {
+    if (active) return;
+    state.activeTagKey = null;
+    highlightActiveTag();
+  };
+  instance.on('content-control:click', onTokenClick);
+  instance.on('content-control:active-change', onActiveChange);
+  state.smartTagSyncTeardown = () => {
+    instance.off('content-control:click', onTokenClick);
+    instance.off('content-control:active-change', onActiveChange);
+  };
+
   setStatus('Ready');
   setBusy(false);
 }
@@ -346,7 +369,11 @@ function insertTagAtCursor(key: FieldKey, label: string): void {
   const editor = state.editor;
   if (!ui || !editor?.doc) return;
   const seg = ui.selection.capture()?.target?.segments?.[0];
-  if (!seg) return; // no caret in the document
+  if (!seg) {
+    // No caret to insert at — tell the user instead of silently no-op'ing.
+    setStatus('Place the cursor in the document, then click a tag to insert it.');
+    return;
+  }
   const point: SelectionPoint = { kind: 'text', blockId: seg.blockId, offset: seg.range.start };
   const result = editor.doc.create.contentControl({
     kind: 'inline',
@@ -475,6 +502,20 @@ function renderSmartTagsPalette(): void {
     section.querySelectorAll<HTMLButtonElement>('.smart-tag').forEach((btn) => {
       btn.style.display = !q || (btn.textContent ?? '').includes(q) ? '' : 'none';
     });
+  });
+
+  highlightActiveTag();
+}
+
+/**
+ * Mirror the active field in the palette: the chip whose key matches
+ * `state.activeTagKey` gets `.is-active`. Driven by `content-control:click`
+ * (and cleared on blur via `content-control:active-change`) — the document ->
+ * sidebar half of the two-way loop.
+ */
+function highlightActiveTag(): void {
+  fieldsPanelEl.querySelectorAll<HTMLButtonElement>('.smart-tag').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.tagKey === state.activeTagKey);
   });
 }
 
@@ -685,6 +726,12 @@ const teardown = () => {
     /* best-effort teardown */
   }
   state.fieldChipTeardown = null;
+  try {
+    state.smartTagSyncTeardown?.();
+  } catch {
+    /* best-effort teardown */
+  }
+  state.smartTagSyncTeardown = null;
   try {
     state.ui?.destroy();
   } catch {
