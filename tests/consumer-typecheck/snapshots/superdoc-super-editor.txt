@@ -54,12 +54,15 @@ ExternalPopoverRenderContext
 FieldValue
 FlowBlock
 FlowMode
+FontAssetUrlContext
+FontAssetUrlResolver
 FontConfig
 FontLoadStatus
 FontLoadSummary
 FontResolutionReason
 FontResolutionRecord
 FontsChangedPayload
+FontsConfig
 FontsResolvedPayload
 HeadlessToolbarController
 HeadlessToolbarSuperdocHost

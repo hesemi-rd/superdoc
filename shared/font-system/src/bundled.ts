@@ -1,53 +1,84 @@
 import type { FontRegistry } from './registry';
+import type { FontAssetUrlContext, FontAssetUrlResolver } from './types';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 export type { BundledLicense, BundledFaceFile, BundledFamilyManifest } from './bundled-manifest';
+export type { FontAssetUrlContext, FontAssetUrlResolver } from './types';
 export { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /**
- * Default base URL the bundled `.woff2` are served from. The build emits the pack to a
- * `fonts/` dir alongside the bundle (see the bundled-fonts vite plugin) and the dev
- * server serves the same path, so this default resolves in dev and in a root-served
- * deploy. Consumers serving the bundle under a sub-path override the base via
- * {@link installBundledSubstitutes}. Per-target auto-resolution (e.g. script-relative on
- * a CDN) is a follow-up; this seam is where it plugs in.
+ * Last-resort base URL the bundled `.woff2` are served from. Used only when neither a
+ * `resolveAssetUrl` nor an `assetBaseUrl` is configured and no build target set a default.
+ * A dev / simple-self-host fallback, NOT the product deploy assumption.
  */
 export const DEFAULT_BUNDLED_FONT_BASE = '/fonts/';
 
-export interface InstallBundledOptions {
-  /** Base URL the `.woff2` are served from. Defaults to {@link DEFAULT_BUNDLED_FONT_BASE}. */
-  baseUrl?: string;
+// Module-level default base. The CDN/IIFE entry overrides it with a script-relative URL
+// at load (see cdn-entry). The editor's config (resolveAssetUrl / assetBaseUrl) takes
+// precedence over this; it is only the floor of the resolution chain.
+let defaultAssetBase = DEFAULT_BUNDLED_FONT_BASE;
+
+/** Override the default asset base (e.g. the CDN entry sets a script-relative URL). */
+export function setBundledFontAssetBase(base: string): void {
+  defaultAssetBase = base;
 }
 
-const installedRegistries = new WeakSet<FontRegistry>();
+/** The current default asset base (script-relative on CDN, else {@link DEFAULT_BUNDLED_FONT_BASE}). */
+export function getBundledFontAssetBase(): string {
+  return defaultAssetBase;
+}
+
+export interface InstallBundledOptions {
+  /** Highest-precedence per-face URL resolver (consumer `fonts.resolveAssetUrl`). */
+  resolveAssetUrl?: FontAssetUrlResolver;
+  /** Base URL the `.woff2` are served from (consumer `fonts.assetBaseUrl`). */
+  assetBaseUrl?: string;
+}
 
 function withTrailingSlash(base: string): string {
   return base.endsWith('/') ? base : `${base}/`;
 }
 
+function joinUrl(base: string, file: string): string {
+  return `${withTrailingSlash(base)}${file}`;
+}
+
+function weightToken(weight: 'normal' | 'bold'): string {
+  return weight === 'bold' ? '700' : '400';
+}
+
+const installedRegistries = new WeakSet<FontRegistry>();
+
 /**
  * Register the bundled substitute pack into a registry, once, as URL-sourced faces.
  *
- * The pack is one font PROVIDER, no different from customer (`superdoc.fonts.add`) or
- * embedded-DOCX fonts: it registers `url(...)` faces through the same `registry.register`
- * path - it never imports font binaries into shared runtime code, so the bytes are
- * emitted as separate assets and are never inlined into the JS bundle.
+ * The pack is one font PROVIDER - it registers `url(...)` faces through the same
+ * `registry.register` path as customer/embedded fonts, never importing font binaries
+ * into shared runtime, so the bytes are emitted as separate assets and never inlined.
  *
- * Loading stays lazy at the binary level: a face's `.woff2` is only fetched when the load
- * gate awaits the physical family a document declares (resolved from `getDocumentFonts()`),
- * not when it is registered. Idempotent per registry; editors sharing a document's
- * `FontFaceSet` install the pack once. The physical family names MUST match the resolver's
- * substitute targets (logical->physical is the resolver's job; this pack supplies the bytes).
+ * URL resolution precedence (per face): `resolveAssetUrl` -> `assetBaseUrl` -> the module
+ * default base (script-relative on CDN, else `/fonts/`). Loading stays lazy at the binary
+ * level: a `.woff2` is fetched only when the load gate awaits the family a document
+ * declares. Idempotent per registry. Physical family names MUST match the resolver's
+ * substitute targets.
  */
 export function installBundledSubstitutes(registry: FontRegistry, options: InstallBundledOptions = {}): void {
   if (installedRegistries.has(registry)) return;
   installedRegistries.add(registry);
-  const base = withTrailingSlash(options.baseUrl ?? DEFAULT_BUNDLED_FONT_BASE);
+  const resolve: FontAssetUrlResolver =
+    options.resolveAssetUrl ?? ((context) => joinUrl(options.assetBaseUrl ?? defaultAssetBase, context.file));
   for (const family of BUNDLED_MANIFEST) {
     for (const face of family.faces) {
+      const context: FontAssetUrlContext = {
+        file: face.file,
+        family: family.family,
+        weight: weightToken(face.weight),
+        style: face.style,
+        source: 'bundled-substitute',
+      };
       registry.register({
         family: family.family,
-        source: `url(${base}${face.file})`,
+        source: `url(${resolve(context)})`,
         descriptors: { weight: face.weight, style: face.style },
       });
     }

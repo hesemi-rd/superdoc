@@ -82,6 +82,10 @@ export class FontRegistry {
   readonly #managed = new Map<string, FontFaceLike>();
   /** Last known load status per family. */
   readonly #status = new Map<string, FontLoadStatus>();
+  /** Registered `url(...)` source(s) per family, to name the failing URL on a load error. */
+  readonly #sources = new Map<string, string[]>();
+  /** Families already warned about a load failure, so the warning fires at most once each. */
+  readonly #warnedFailures = new Set<string>();
   /** In-flight loads, so concurrent awaits of one family share a single probe. */
   readonly #inflight = new Map<string, Promise<FontLoadResult>>();
 
@@ -106,6 +110,11 @@ export class FontRegistry {
       const face = new this.#FontFaceCtor(family, source, descriptors);
       this.#fontSet.add(face);
       this.#managed.set(family, face);
+    }
+    if (typeof source === 'string') {
+      const list = this.#sources.get(family) ?? [];
+      if (!list.includes(source)) list.push(source);
+      this.#sources.set(family, list);
     }
     if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
     return { family, status: this.#status.get(family) ?? 'unloaded' };
@@ -215,10 +224,28 @@ export class FontRegistry {
       return { family, status };
     } catch {
       this.#status.set(family, 'failed');
+      this.#warnLoadFailureOnce(family);
       return { family, status: 'failed' };
     } finally {
       this.#cancelTimeout(handle);
     }
+  }
+
+  /**
+   * Warn once per family when a registered face fails to load (e.g. its `.woff2` 404s
+   * because the asset base is misconfigured). Names the attempted URL(s) so the failure
+   * is never silent - the report also flags it (`missing: true`, `loadStatus: 'failed'`).
+   */
+  #warnLoadFailureOnce(family: string): void {
+    if (this.#warnedFailures.has(family)) return;
+    this.#warnedFailures.add(family);
+    const sources = this.#sources.get(family);
+    const detail = sources && sources.length ? ` from ${sources.join(', ')}` : '';
+     
+    console.warn(
+      `[superdoc] font asset failed to load for "${family}"${detail}. ` +
+        `Check fonts.assetBaseUrl / fonts.resolveAssetUrl so the bundled .woff2 are served.`,
+    );
   }
 }
 

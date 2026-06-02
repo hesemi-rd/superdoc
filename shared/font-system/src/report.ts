@@ -22,9 +22,12 @@ export interface FontResolutionRecord {
   /** The family export writes back - always the logical name, so intent is preserved. */
   exportFamily: string;
   /**
-   * True when the document's font is rendered with a generic fallback, not a faithful
-   * face: no known substitute AND the requested family itself did not load. These are
-   * the fonts a user would notice as "wrong".
+   * True when the physical face is NOT loaded for measurement - the user sees a generic
+   * fallback, not the intended font. This covers BOTH a font with no known substitute
+   * (`reason: 'as_requested'`, e.g. Aptos) AND a substitute whose asset failed to load
+   * (`reason: 'bundled_substitute'`, `loadStatus: 'failed'`, e.g. a misconfigured
+   * `assetBaseUrl` that 404s) - both render wrong, so both are "missing". The `reason`
+   * and `loadStatus` fields distinguish the cause (unsupported vs failed vs timed out).
    */
   missing: boolean;
 }
@@ -52,7 +55,7 @@ export function buildFontReport(logicalFamilies: Iterable<string>, registry: Fon
       reason,
       loadStatus,
       exportFamily: logical,
-      missing: reason === 'as_requested' && loadStatus !== 'loaded',
+      missing: loadStatus !== 'loaded',
     });
   }
   return report;

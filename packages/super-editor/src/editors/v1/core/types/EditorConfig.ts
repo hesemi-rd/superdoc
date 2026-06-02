@@ -13,6 +13,26 @@ import type {
   CommentLocationsPayload,
   ListDefinitionsPayload,
 } from './EditorEvents.js';
+import type { FontAssetUrlResolver } from '@superdoc/font-system';
+
+/**
+ * Configuration for SuperDoc's font system. Currently the served location of the bundled
+ * metric-compatible substitute pack; the resolver/registry/gate path is unaffected.
+ */
+export interface FontsConfig {
+  /**
+   * Base URL the bundled font `.woff2` are served from, e.g. `/fonts/` or
+   * `https://cdn.example.com/superdoc-fonts/v1/`. Required for npm/SSR/framework deploys
+   * that serve the assets from a non-root path; the CDN `<script>` build auto-detects a
+   * script-relative `./fonts/` default.
+   */
+  assetBaseUrl?: string;
+  /**
+   * Resolve each bundled asset's URL for signed / versioned / tenant-specific hosting.
+   * Synchronous (font resolution stays deterministic). Takes precedence over `assetBaseUrl`.
+   */
+  resolveAssetUrl?: FontAssetUrlResolver;
+}
 import type { ProseMirrorJSON } from './EditorTypes.js';
 
 /**

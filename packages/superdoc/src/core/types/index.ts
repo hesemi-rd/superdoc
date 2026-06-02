@@ -28,9 +28,12 @@ import type {
   CollaborationProvider as SuperEditorCollaborationProvider,
   Comment,
   FontConfig,
+  FontsConfig,
   FontsResolvedPayload,
   FontsChangedPayload,
   FontResolutionRecord,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   ListDefinitionsPayload,
   ProofingProvider,
   User,
@@ -68,7 +71,13 @@ export type NavigableAddress = SuperEditorNavigableAddress;
  * `#assignUserColor()` after `#init`.
  */
 export type { User } from '@superdoc/super-editor';
-export type { FontResolutionRecord, FontsChangedPayload } from '@superdoc/super-editor';
+export type {
+  FontResolutionRecord,
+  FontsChangedPayload,
+  FontsConfig,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
+} from '@superdoc/super-editor';
 
 /**
  * Read-only font surface on a SuperDoc instance (`superdoc.fonts`). The authoritative,
@@ -1852,6 +1861,13 @@ export interface Config {
   telemetry?: SuperDocTelemetryConfig;
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
+  /**
+   * Font system configuration. Currently the served location of the bundled
+   * metric-compatible substitute pack: set `fonts.assetBaseUrl` (e.g. `/fonts/` or a CDN
+   * URL) for npm/SSR/framework deploys, or `fonts.resolveAssetUrl` for signed/versioned
+   * hosting. The CDN `<script>` build auto-detects a script-relative default.
+   */
+  fonts?: FontsConfig;
   /**
    * Opt-in toggle for the layout engine. Auto-disabled when web layout is
    * requested without `layoutEngineOptions.flowMode === 'semantic'`; the

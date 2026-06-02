@@ -912,7 +912,11 @@ export class PresentationEditor extends EventEmitter {
         resolveFamilies: resolvePhysicalFamilies,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.
-        onRegistryResolved: (registry) => installBundledSubstitutes(registry),
+        onRegistryResolved: (registry) =>
+          installBundledSubstitutes(registry, {
+            assetBaseUrl: this.#options.fontAssets?.assetBaseUrl,
+            resolveAssetUrl: this.#options.fontAssets?.resolveAssetUrl,
+          }),
         getFontEnvironment: () => {
           // Bind the registry and the watched font set to THIS editor's document, so an
           // editor inside an iframe awaits and listens on the same FontFaceSet.

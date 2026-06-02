@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-02T19:41:10.924Z",
+  "generatedAt": "2026-06-02T20:51:59.655Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -88,9 +88,12 @@
         "FindReplaceResolution",
         "FlowBlock",
         "FlowMode",
+        "FontAssetUrlContext",
+        "FontAssetUrlResolver",
         "FontConfig",
         "FontResolutionRecord",
         "FontsChangedPayload",
+        "FontsConfig",
         "FontsResolvedPayload",
         "HTML",
         "ImageDeselectedEvent",
@@ -316,9 +319,12 @@
         "FindReplaceResolution",
         "FlowBlock",
         "FlowMode",
+        "FontAssetUrlContext",
+        "FontAssetUrlResolver",
         "FontConfig",
         "FontResolutionRecord",
         "FontsChangedPayload",
+        "FontsConfig",
         "FontsResolvedPayload",
         "HTML",
         "ImageDeselectedEvent",
@@ -563,11 +569,11 @@
     }
   },
   "counts": {
-    "types.import": 222,
-    "types.require": 222,
+    "types.import": 225,
+    "types.require": 225,
     "import": 41,
     "require": 41,
-    "union": 222
+    "union": 225
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -645,9 +651,12 @@
         "FindReplaceResolution",
         "FlowBlock",
         "FlowMode",
+        "FontAssetUrlContext",
+        "FontAssetUrlResolver",
         "FontConfig",
         "FontResolutionRecord",
         "FontsChangedPayload",
+        "FontsConfig",
         "FontsResolvedPayload",
         "ImageDeselectedEvent",
         "ImageSelectedEvent",

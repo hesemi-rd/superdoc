@@ -20,6 +20,8 @@ export type {
   RegisteredFace,
   FontLoadResult,
   FontLoadSummary,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   RequiredFace,
 } from './types';
 export { SETTLED_STATUSES, isSettled } from './types';
@@ -33,6 +35,10 @@ export {
 } from './resolver';
 
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';
+
+// The bundled-asset base setter is also exported here (not only the ./bundled subpath) so
+// the CDN entry can resolve it through the bare `@superdoc/font-system` specifier.
+export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_BASE } from './bundled';
 
 export type { FontResolutionRecord } from './report';
 export { buildFontReport } from './report';

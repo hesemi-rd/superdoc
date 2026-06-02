@@ -76,6 +76,8 @@ export type {
   FontResolutionReason,
   FontLoadStatus,
   FontLoadSummary,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
 } from '@superdoc/font-system';
 
 // Parts system types (used by partChanged event handler)
@@ -86,6 +88,7 @@ export type {
   EditorOptions,
   User,
   FontConfig,
+  FontsConfig,
   FieldValue,
   DocxFileEntry,
   ViewLayout,

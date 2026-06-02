@@ -81,6 +81,25 @@ export interface FontLoadSummary {
 }
 
 /**
+ * Context for resolving one bundled font asset's served URL, passed to a consumer's
+ * `fonts.resolveAssetUrl`. `source` is the provider kind so the same resolver contract
+ * can extend to customer/embedded fonts later.
+ */
+export interface FontAssetUrlContext {
+  /** Asset filename, e.g. `Carlito-Regular.woff2`. */
+  file: string;
+  /** Physical family, e.g. `Carlito`. */
+  family: string;
+  /** CSS weight token, `400` or `700`. */
+  weight: string;
+  style: 'normal' | 'italic';
+  source: 'bundled-substitute';
+}
+
+/** Resolve a font asset's served URL. Synchronous: font registration stays deterministic. */
+export type FontAssetUrlResolver = (context: FontAssetUrlContext) => string;
+
+/**
  * A required family paired with a promise that settles when its load resolves.
  * The gate can either `await` the promises or read `status` synchronously for a
  * face it already knows about.
