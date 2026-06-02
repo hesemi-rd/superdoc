@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { FontLoadResult, FontLoadStatus, FontRegistry } from '@superdoc/font-system';
+import type {
+  FontFaceLoadResult,
+  FontFaceRequest,
+  FontLoadResult,
+  FontLoadStatus,
+  FontRegistry,
+} from '@superdoc/font-system';
 import { FontReadinessGate, type FontEnvironment } from './FontReadinessGate';
+
+const faceKey = (r: FontFaceRequest) => `${r.family.toLowerCase()}|${r.weight}|${r.style}`;
 
 /** Minimal FontFace constructor stand-in for the environment (unused when a registry is injected). */
 class FakeFontFace {
@@ -27,6 +35,18 @@ class FakeRegistry {
     const unique = [...new Set(families)];
     this.awaitCalls.push(unique);
     return unique.map((family) => ({ family, status: this.getStatus(family) }));
+  }
+
+  // Face-level slice for the face path.
+  readonly faceStatuses = new Map<string, FontLoadStatus>();
+  readonly faceAwaitCalls: string[][] = [];
+  getFaceStatus(request: FontFaceRequest): FontLoadStatus {
+    return this.faceStatuses.get(faceKey(request)) ?? 'unloaded';
+  }
+  async awaitFaceRequests(requests: Iterable<FontFaceRequest>): Promise<FontFaceLoadResult[]> {
+    const unique = [...requests];
+    this.faceAwaitCalls.push(unique.map(faceKey));
+    return unique.map((request) => ({ request, status: this.getFaceStatus(request) }));
   }
   asRegistry(): FontRegistry {
     return this as unknown as FontRegistry;
@@ -181,5 +201,50 @@ describe('FontReadinessGate', () => {
     });
 
     await expect(gate.ensureReadyForMeasure()).resolves.toMatchObject({ loaded: 0 });
+  });
+
+  describe('face-aware path (getRequiredFaces)', () => {
+    const BOLD: FontFaceRequest = { family: 'Carlito', weight: '700', style: 'normal' };
+
+    function makeFaceGate(getRequiredFaces: () => FontFaceRequest[]) {
+      return new FontReadinessGate({
+        registry: registry.asRegistry(),
+        getDocumentFonts: () => [],
+        getRequiredFaces,
+        requestReflow,
+        invalidateCaches,
+        getFontEnvironment: () => ({ fontSet: fontSet.asFontSet(), FontFaceCtor: fakeCtor }),
+        timeoutMs: 1000,
+      });
+    }
+
+    it('awaits the exact required faces (family + weight + style), not families', async () => {
+      registry.faceStatuses.set(faceKey(BOLD), 'loaded');
+      const gate = makeFaceGate(() => [BOLD]);
+      const summary = await gate.ensureReadyForMeasure();
+      expect(registry.faceAwaitCalls).toEqual([['carlito|700|normal']]);
+      expect(summary.loaded).toBe(1);
+    });
+
+    it('reflows once when the required bold face loads after a timed-out first paint', async () => {
+      registry.faceStatuses.set(faceKey(BOLD), 'timed_out');
+      const gate = makeFaceGate(() => [BOLD]);
+      await gate.ensureReadyForMeasure();
+      expect(requestReflow).not.toHaveBeenCalled();
+
+      // A REGULAR Carlito face finishing must NOT reflow - it is not a required face.
+      fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'normal', style: 'normal' }] });
+      expect(requestReflow).not.toHaveBeenCalled();
+
+      // The required BOLD face finishing DOES reflow, exactly once.
+      registry.faceStatuses.set(faceKey(BOLD), 'loaded');
+      fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'bold', style: 'normal' }] });
+      expect(requestReflow).toHaveBeenCalledTimes(1);
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
+
+      // A second loadingdone for the same face does not reflow again (no loop).
+      fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'bold', style: 'normal' }] });
+      expect(requestReflow).toHaveBeenCalledTimes(1);
+    });
   });
 });
