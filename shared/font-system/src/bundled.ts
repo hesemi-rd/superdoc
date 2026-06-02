@@ -47,7 +47,25 @@ function weightToken(weight: 'normal' | 'bold'): string {
   return weight === 'bold' ? '700' : '400';
 }
 
-const installedRegistries = new WeakSet<FontRegistry>();
+// Per-registry install record: the resolved asset signature of the FIRST install. A
+// registry is shared per `FontFaceSet` (per document), so two SuperDoc instances on one
+// page share it. The first config wins (the common case is one font config per document);
+// a later install resolving to a DIFFERENT location is reported, not silently dropped.
+const installedRegistries = new WeakMap<FontRegistry, string>();
+
+/** Resolved URL of the first manifest face - a cheap signature of the asset location. */
+function bundledAssetSignature(resolve: FontAssetUrlResolver): string {
+  const family = BUNDLED_MANIFEST[0];
+  const face = family?.faces[0];
+  if (!family || !face) return '';
+  return resolve({
+    file: face.file,
+    family: family.family,
+    weight: weightToken(face.weight),
+    style: face.style,
+    source: 'bundled-substitute',
+  });
+}
 
 /**
  * Register the bundled substitute pack into a registry, once, as URL-sourced faces.
@@ -63,10 +81,22 @@ const installedRegistries = new WeakSet<FontRegistry>();
  * substitute targets.
  */
 export function installBundledSubstitutes(registry: FontRegistry, options: InstallBundledOptions = {}): void {
-  if (installedRegistries.has(registry)) return;
-  installedRegistries.add(registry);
   const resolve: FontAssetUrlResolver =
     options.resolveAssetUrl ?? ((context) => joinUrl(options.assetBaseUrl ?? defaultAssetBase, context.file));
+  const signature = bundledAssetSignature(resolve);
+  const installed = installedRegistries.get(registry);
+  if (installed !== undefined) {
+    if (installed !== signature) {
+       
+      console.warn(
+        `[superdoc] bundled fonts are already registered for this document from "${installed}"; ` +
+          `a later fonts config resolving to "${signature}" is ignored. ` +
+          `Use one fonts.assetBaseUrl / fonts.resolveAssetUrl per document.`,
+      );
+    }
+    return;
+  }
+  installedRegistries.set(registry, signature);
   for (const family of BUNDLED_MANIFEST) {
     for (const face of family.faces) {
       const context: FontAssetUrlContext = {

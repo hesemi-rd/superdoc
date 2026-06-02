@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   installBundledSubstitutes,
   BUNDLED_MANIFEST,
@@ -71,11 +71,24 @@ describe('installBundledSubstitutes URL resolution', () => {
     );
   });
 
-  it('is idempotent per registry', () => {
+  it('is idempotent per registry for the same config', () => {
     const reg = new CaptureRegistry();
     const handle = reg.asRegistry();
-    installBundledSubstitutes(handle);
-    installBundledSubstitutes(handle);
+    installBundledSubstitutes(handle, { assetBaseUrl: '/fonts/' });
+    installBundledSubstitutes(handle, { assetBaseUrl: '/fonts/' });
     expect(reg.registered).toHaveLength(FACE_COUNT);
+  });
+
+  it('keeps the first config and warns on a conflicting later install (shared registry)', () => {
+    const reg = new CaptureRegistry();
+    const handle = reg.asRegistry();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    installBundledSubstitutes(handle, { assetBaseUrl: '/first/' });
+    installBundledSubstitutes(handle, { assetBaseUrl: '/second/' }); // conflicting -> ignored + warns
+    expect(reg.registered).toHaveLength(FACE_COUNT); // not re-registered
+    expect(reg.sourcesFor('Carlito')).toContain('url(/first/Carlito-Regular.woff2)');
+    expect(reg.sourcesFor('Carlito')).not.toContain('url(/second/Carlito-Regular.woff2)');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });

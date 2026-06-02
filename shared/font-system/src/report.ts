@@ -1,6 +1,6 @@
 import { resolveFontFamily, type FontResolutionReason } from './resolver';
 import type { FontRegistry } from './registry';
-import type { FontLoadStatus } from './types';
+import { isSettled, type FontLoadStatus } from './types';
 
 /**
  * One row of the font report: what the document asked for, what SuperDoc actually
@@ -22,12 +22,13 @@ export interface FontResolutionRecord {
   /** The family export writes back - always the logical name, so intent is preserved. */
   exportFamily: string;
   /**
-   * True when the physical face is NOT loaded for measurement - the user sees a generic
-   * fallback, not the intended font. This covers BOTH a font with no known substitute
-   * (`reason: 'as_requested'`, e.g. Aptos) AND a substitute whose asset failed to load
-   * (`reason: 'bundled_substitute'`, `loadStatus: 'failed'`, e.g. a misconfigured
-   * `assetBaseUrl` that 404s) - both render wrong, so both are "missing". The `reason`
-   * and `loadStatus` fields distinguish the cause (unsupported vs failed vs timed out).
+   * True when the physical face reached a SETTLED state that is not `loaded` - the user
+   * sees a generic fallback, not the intended font. This covers BOTH a font with no known
+   * substitute (`reason: 'as_requested'`, e.g. Aptos) AND a substitute whose asset failed
+   * to load (`reason: 'bundled_substitute'`, `loadStatus: 'failed'`, e.g. a misconfigured
+   * `assetBaseUrl` that 404s). Transient states (`unloaded` / `loading`) are NOT missing,
+   * so an early `getReport()` pull before the gate settles does not over-report. The
+   * `reason` and `loadStatus` fields distinguish the cause (unsupported vs failed vs timed out).
    */
   missing: boolean;
 }
@@ -55,7 +56,7 @@ export function buildFontReport(logicalFamilies: Iterable<string>, registry: Fon
       reason,
       loadStatus,
       exportFamily: logical,
-      missing: loadStatus !== 'loaded',
+      missing: isSettled(loadStatus) && loadStatus !== 'loaded',
     });
   }
   return report;

@@ -42,6 +42,14 @@ describe('buildFontReport', () => {
     expect(buildFontReport(['Verdana'], reg.asRegistry())[0].missing).toBe(false);
   });
 
+  it('does not mark a transient unloaded state as missing (no early-pull over-report)', () => {
+    const reg = new FakeRegistry();
+    reg.statuses.set('Carlito', 'unloaded'); // registered but the gate has not awaited it yet
+    const [rec] = buildFontReport(['Calibri'], reg.asRegistry());
+    expect(rec.loadStatus).toBe('unloaded');
+    expect(rec.missing).toBe(false);
+  });
+
   it('flags a substitute whose asset failed to load as missing (cause kept in reason/loadStatus)', () => {
     const reg = new FakeRegistry();
     reg.statuses.set('Carlito', 'failed'); // e.g. the bundled .woff2 404s from a bad assetBaseUrl
