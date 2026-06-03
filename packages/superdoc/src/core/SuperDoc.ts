@@ -1571,17 +1571,25 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     if (this.#fontsRelayEditors.has(editor)) return;
     this.#fontsRelayEditors.add(editor);
     editor.on('fonts-changed', (payload) => {
-      // Only surface the active editor's report. After a document swap an old editor can
-      // still emit `fonts-changed` (e.g. a timed-out font finishing later), and the payload
-      // carries no document id to disambiguate; forwarding it would deliver a stale report
-      // for the prior document and poison the `onReport` cache. Drop events from any editor
-      // that is no longer active. (When no editor is active yet, the sole editor's events
-      // still surface, matching the documented active-editor semantics.)
-      if (this.activeEditor && editor !== this.activeEditor) return;
-      this.#deliverFontsChanged(payload);
+      if (this.#fontReportSurfaces(editor)) this.#deliverFontsChanged(payload);
     });
+    // Replay the editor's already-emitted report once on wire (a fast or swapped document may
+    // have emitted before this relay subscribed), under the SAME active-editor rule as the
+    // live path so creating an inactive editor cannot replay a stale report into the cache.
     const cached = editor.presentationEditor?.getLastFontsChangedPayload?.();
-    if (cached) this.#deliverFontsChanged(cached);
+    if (cached && this.#fontReportSurfaces(editor)) this.#deliverFontsChanged(cached);
+  }
+
+  /**
+   * Whether a wired editor's font report may surface on the SuperDoc instance. Only the
+   * active editor's report surfaces; before any editor is marked active, the sole editor's
+   * does. After a document swap an old editor can still emit `fonts-changed` (e.g. a
+   * timed-out font finishing later) or be re-created with a cached payload - the payload has
+   * no document id to disambiguate, so surfacing it would poison the `onReport` cache for the
+   * new document. Both the live event and the cached replay gate on this single rule.
+   */
+  #fontReportSurfaces(editor: Editor): boolean {
+    return !this.activeEditor || editor === this.activeEditor;
   }
 
   /** Last font report delivered on this instance, so `fonts.onReport` can replay it. */

@@ -1064,6 +1064,33 @@ describe('SuperDoc core', () => {
       newEditor.emit('fonts-changed', activePayload);
       expect(received).toEqual([activePayload]);
     });
+
+    it('does not replay a cached report when an inactive editor is created', async () => {
+      const instance = await makeInstance();
+      const activeEditor = makeEmitterEditor();
+      instance.activeEditor = activeEditor;
+      instance.broadcastEditorCreate(activeEditor); // active editor, no cached payload
+
+      const received = [];
+      instance.on('fonts-changed', (p) => received.push(p));
+
+      // A different, non-active editor is created and already has a cached report. Its
+      // replay-on-wire must obey the same active-editor rule as the live event.
+      const stale = {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      const inactiveEditor = makeEmitterEditor({
+        presentationEditor: { getLastFontsChangedPayload: () => stale },
+      });
+      instance.broadcastEditorCreate(inactiveEditor);
+
+      expect(received).toEqual([]); // cached replay from the inactive editor dropped
+    });
   });
 
   it('uses visible search model in SuperDoc.search()', async () => {
