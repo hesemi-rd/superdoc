@@ -533,8 +533,10 @@ export class PresentationEditor extends EventEmitter {
   #fontGate: FontReadinessGate | null = null;
   /**
    * This document's logical->physical font resolver. Per-instance (per document) so two
-   * editors can map the same logical family differently without leaking; planner, gate,
-   * measure, paint, and report all resolve through THIS instance.
+   * editors can map the same logical family differently without leaking. Planner, gate, and
+   * report resolve through THIS instance today; threading measure + paint (and folding the
+   * resolver signature into their cache/reuse keys) is the remaining step before runtime
+   * `fonts.map` is safe - until then measure/paint still use the global resolver.
    */
   readonly #fontResolver = createFontResolver();
   /** Layout blocks for the current render, stashed so the gate's planner reads the live set. */
@@ -974,7 +976,8 @@ export class PresentationEditor extends EventEmitter {
         // fonts are not fetched. Reads the blocks stashed just before each gate await.
         getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks, this.#fontResolver),
         // The document's resolver: the gate derives the family-path resolution from it and
-        // resolves its report through it, so load, measure, paint, and diagnostics agree.
+        // resolves its report through it (load + diagnostics). Measure/paint do not read it
+        // yet - threading them is the remaining step before load/measure/paint fully agree.
         fontResolver: this.#fontResolver,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.

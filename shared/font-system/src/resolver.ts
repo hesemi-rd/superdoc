@@ -75,7 +75,7 @@ function splitStack(cssFontFamily: string): string[] {
  * map; also holds per-instance runtime overrides (a customer `fonts.map`). Because each
  * document owns its instance, two documents can map the same logical family to different
  * physical families without interfering. Its {@link signature} (NOT the numeric
- * {@link version}) is the identity measure-cache keys and paint reuse signatures fold in,
+ * {@link version}) is the identity measure-cache keys and paint reuse signatures must fold in,
  * so two documents at the same version with different mappings never collide.
  */
 export class FontResolver {

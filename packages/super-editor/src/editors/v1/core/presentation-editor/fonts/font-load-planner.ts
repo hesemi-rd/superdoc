@@ -13,10 +13,11 @@ import type { FlowBlock, ParagraphBlock, TableBlock, ListBlock, Run } from '@sup
  *
  * This walks the layout input (`blocksForLayout`) - which exists BEFORE measurement and
  * already carries each run's `fontFamily` + `bold`/`italic` - and emits the deduped set of
- * physical face requests. It resolves logical -> physical with the DOCUMENT'S resolver (the
- * same instance measure and paint use), so the planned/loaded set cannot disagree with what
- * is actually measured/painted - including a per-document `fonts.map`. Declared-font
- * diagnostics stay separate (`getDocumentFonts()` / `getReport()`); this feeds loading only.
+ * physical face requests. It resolves logical -> physical with the DOCUMENT'S resolver - the
+ * same instance measure and paint will use once they are threaded onto it - so the planned/
+ * loaded set cannot disagree with what is actually measured/painted, including a per-document
+ * `fonts.map`. Declared-font diagnostics stay separate (`getDocumentFonts()` / `getReport()`);
+ * this feeds loading only.
  */
 
 /** Resolve a logical family to its bare physical face name, per the document's resolver. */
