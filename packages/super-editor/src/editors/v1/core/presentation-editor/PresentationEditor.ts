@@ -177,7 +177,7 @@ import type {
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
-import { resolvePhysicalFamilies, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
+import { createFontResolver, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
 import { planRequiredFontFaces } from './fonts/font-load-planner';
@@ -531,6 +531,12 @@ export class PresentationEditor extends EventEmitter {
   #selectionSync = new SelectionSyncCoordinator();
   /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
   #fontGate: FontReadinessGate | null = null;
+  /**
+   * This document's logical->physical font resolver. Per-instance (per document) so two
+   * editors can map the same logical family differently without leaking; planner, gate,
+   * measure, paint, and report all resolve through THIS instance.
+   */
+  readonly #fontResolver = createFontResolver();
   /** Layout blocks for the current render, stashed so the gate's planner reads the live set. */
   #fontPlanBlocks: FlowBlock[] | null = null;
   /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
@@ -966,10 +972,10 @@ export class PresentationEditor extends EventEmitter {
         // rendered document uses, from the planner walking the current layout blocks. The
         // gate awaits these - so bold/italic load before measure and declared-but-unused
         // fonts are not fetched. Reads the blocks stashed just before each gate await.
-        getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks),
-        // Fallback family path (used only if getRequiredFaces is unavailable): wait on the
-        // resolved PHYSICAL families (Calibri -> Carlito).
-        resolveFamilies: resolvePhysicalFamilies,
+        getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks, this.#fontResolver),
+        // The document's resolver: the gate derives the family-path resolution from it and
+        // resolves its report through it, so load, measure, paint, and diagnostics agree.
+        fontResolver: this.#fontResolver,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.
         onRegistryResolved: (registry) =>
