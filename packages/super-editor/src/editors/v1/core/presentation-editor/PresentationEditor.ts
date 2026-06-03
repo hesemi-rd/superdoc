@@ -180,7 +180,7 @@ import { measureBlock } from '@superdoc/measuring-dom';
 import { createFontResolver, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
-import { DocumentFontController } from './fonts/DocumentFontController';
+import { DocumentFontController, type ManagedFontFamily } from './fonts/DocumentFontController';
 import { planRequiredFontFaces } from './fonts/font-load-planner';
 import type { FontsChangedPayload } from '../types/EditorEvents';
 import type {
@@ -2968,6 +2968,23 @@ export class PresentationEditor extends EventEmitter {
    */
   unmapFonts(families: string | string[]): void {
     this.#fontController.unmap(families);
+  }
+
+  /**
+   * Register custom physical font faces for THIS document via the document font controller, then
+   * reflow so a newly-registered face the document already uses is awaited and applied. Surfaced
+   * as `superdoc.fonts.add()`.
+   */
+  addFonts(families: ManagedFontFamily[]): void {
+    this.#fontController.add(families);
+  }
+
+  /**
+   * Proactively load the physical faces for the given logical families (resolved through this
+   * document's resolver) so they are ready before use. Async. Surfaced as `superdoc.fonts.preload()`.
+   */
+  async preloadFonts(families: string[]): Promise<void> {
+    await this.#fontController.preload(families);
   }
 
   /**

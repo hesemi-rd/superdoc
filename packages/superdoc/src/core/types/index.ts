@@ -89,6 +89,23 @@ export type {
  * follow. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
  * fonts (font table + theme + defaults), not only fonts visible on screen.
  */
+/** One physical font face to register: a URL source plus optional weight/style. */
+export interface SuperDocFontFace {
+  /** A URL the browser loads ('/fonts/Gelasio-Regular.woff2' or 'url(...)'). */
+  source: string;
+  /** Font weight (e.g. 400, 700, 'bold'); defaults to 400. */
+  weight?: number | string;
+  /** Font style ('normal' | 'italic'); defaults to 'normal'. */
+  style?: string;
+}
+
+/** A physical font family to register with SuperDoc, with its weight/style faces. */
+export interface SuperDocFontFamily {
+  /** The physical family documents map to and CSS renders (e.g. 'Gelasio'). */
+  family: string;
+  faces: SuperDocFontFace[];
+}
+
 export interface SuperDocFontsApi {
   /** Per-font report: requested logical family -> physical render family, reason, load status, export family, missing. */
   getReport(): FontResolutionRecord[];
@@ -121,6 +138,23 @@ export interface SuperDocFontsApi {
    * @throws Error if no editor is active.
    */
   unmap(families: string | string[]): void;
+  /**
+   * Register custom physical font faces (URL sources) for the ACTIVE document so they can be mapped
+   * to and loaded - e.g.
+   * `add({ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2', weight: 400 }] })`.
+   * Registering does NOT map; pair with {@link map}. Re-adding the same source for a face is
+   * idempotent; a DIFFERENT source for the same family/weight/style throws. Reflows once if a
+   * registered face is one the document already uses.
+   * @throws Error if no editor is active, or if a conflicting source is registered.
+   */
+  add(families: SuperDocFontFamily | SuperDocFontFamily[]): void;
+  /**
+   * Proactively load the physical faces for the given LOGICAL families (resolved through the active
+   * document's mappings) so they are ready before use, avoiding a late-load reflow. Awaits the
+   * regular (400/normal) face via the registry.
+   * @throws Error if no editor is active.
+   */
+  preload(families: string[]): Promise<void>;
 }
 
 /**

@@ -1,5 +1,22 @@
-import type { FontResolver } from '@superdoc/font-system';
+import type { FontFaceRequest, FontResolver } from '@superdoc/font-system';
 import type { FontReadinessGate } from './FontReadinessGate.js';
+
+/** One physical font face: a URL source plus optional weight/style (default 400/normal). */
+export interface ManagedFontFace {
+  /** A URL the FontFace loads ('/fonts/x.woff2' or 'url(...)'). v1 is URL-only; no binary sources. */
+  source: string;
+  /** Font weight (e.g. 400, 700, 'bold'); defaults to 400. */
+  weight?: number | string;
+  /** Font style ('normal' | 'italic'); defaults to 'normal'. */
+  style?: string;
+}
+
+/** A physical family to register, with its weight/style faces. */
+export interface ManagedFontFamily {
+  /** The physical family name documents map to and CSS renders (e.g. 'Gelasio'). */
+  family: string;
+  faces: ManagedFontFace[];
+}
 
 export interface DocumentFontControllerDeps {
   /**
@@ -77,12 +94,59 @@ export class DocumentFontController {
   }
 
   /**
+   * Register custom physical font faces (e.g. a customer's Gelasio woff2s) so they become loadable
+   * and mappable. Registers only - it does NOT map (call {@link map} for that). Idempotent per
+   * face; a different source for an already-registered family|weight|style throws (the registry is
+   * the guard). v1 sources are URLs. Registration changes which faces are available, so it reflows
+   * this document once: the gate re-plans and awaits any newly-registered face the document already
+   * uses. Export is unaffected (mapping/render only).
+   */
+  add(families: ManagedFontFamily[]): void {
+    const registry = this.#getGate()?.resolveRegistry();
+    if (!registry) throw new Error('[superdoc] fonts.add: the font registry is not ready yet');
+    let registered = 0;
+    for (const { family, faces } of families) {
+      for (const face of faces) {
+        registry.register({
+          family,
+          source: face.source,
+          descriptors: { weight: face.weight == null ? undefined : String(face.weight), style: face.style },
+        });
+        registered += 1;
+      }
+    }
+    // Unlike map/unmap, registration does not change the resolver signature, so the reflow is
+    // unconditional whenever anything was registered (availability changed for this document).
+    if (registered > 0) this.#reflow();
+  }
+
+  /**
+   * Proactively load the physical faces for the given LOGICAL families so they are ready before the
+   * document needs them (avoiding a late-load reflow). Resolves each logical family through THIS
+   * document's resolver, then awaits its regular (400/normal) face via the registry. Async by
+   * design - loading is not hidden inside {@link map}. Weighted/italic variants load on demand.
+   */
+  async preload(families: string[]): Promise<void> {
+    const registry = this.#getGate()?.resolveRegistry();
+    if (!registry) throw new Error('[superdoc] fonts.preload: the font registry is not ready yet');
+    const requests: FontFaceRequest[] = families.map((logical) => ({
+      family: this.#resolver.resolvePrimaryPhysicalFamily(logical),
+      weight: '400',
+      style: 'normal',
+    }));
+    await registry.awaitFaceRequests(requests);
+  }
+
+  /**
    * Reflow the document once iff the signature changed since `signatureBefore`. A no-op mutation
-   * (signature unchanged) must not reflow or emit. On a real change, mark the next `fonts-changed`
-   * as a config change and reflow via the document-local mapping path.
+   * (signature unchanged) must not reflow or emit.
    */
   #reflowIfChanged(signatureBefore: string): void {
-    if (this.#resolver.signature === signatureBefore) return;
+    if (this.#resolver.signature !== signatureBefore) this.#reflow();
+  }
+
+  /** Document-local reflow + mark the next `fonts-changed` as a config change. */
+  #reflow(): void {
     this.#onMappingApplied();
     this.#getGate()?.notifyFontMappingChanged();
   }

@@ -1666,6 +1666,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
           if (!pe) throw new Error('superdoc.fonts.unmap requires an active editor');
           pe.unmapFonts(families);
         },
+        add: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.add requires an active editor');
+          pe.addFonts(Array.isArray(families) ? families : [families]);
+        },
+        preload: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.preload requires an active editor');
+          return pe.preloadFonts(families);
+        },
       };
     }
     return this.#fontsApi;
