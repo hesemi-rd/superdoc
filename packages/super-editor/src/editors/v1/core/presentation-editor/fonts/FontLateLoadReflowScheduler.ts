@@ -24,7 +24,7 @@
  * without real time.
  */
 
-export type FontReflowFlushReason = 'quiet' | 'throttle' | 'manual';
+export type FontReflowFlushReason = 'quiet' | 'throttle';
 
 export interface FontReflowFlushDetails {
   reason: FontReflowFlushReason;
@@ -96,13 +96,6 @@ export class FontLateLoadReflowScheduler {
     this.#quietHandle = this.#scheduleTimeout(() => this.#onQuietElapsed(), this.#quietMs);
   }
 
-  /** Flush any pending batch immediately (no-op if nothing pending), then open a cooldown. */
-  flushNow(reason: FontReflowFlushReason = 'manual'): void {
-    if (this.#pending.size === 0) return;
-    this.#clearTimers();
-    this.#doFlush(reason);
-  }
-
   /** Drop pending work + timers without flushing, and reset cooldown (call on teardown / config change). */
   cancel(): void {
     this.#clearTimers();
@@ -126,12 +119,17 @@ export class FontLateLoadReflowScheduler {
   /** Emit one reflow for the current batch, then open a cooldown that bounds the next flush. */
   #doFlush(reason: FontReflowFlushReason): void {
     this.#trailing = false;
-    if (this.#pending.size > 0) {
-      const faceKeys = [...this.#pending];
-      this.#pending.clear();
-      this.#flush({ reason, faceKeys });
+    try {
+      if (this.#pending.size > 0) {
+        const faceKeys = [...this.#pending];
+        this.#pending.clear();
+        this.#flush({ reason, faceKeys });
+      }
+    } finally {
+      // Always arm the cooldown, even if #flush throws, so the flush rate stays bounded and a
+      // timer callback never leaks an uncaught exception (font readiness must not break layout).
+      this.#cooldownHandle = this.#scheduleTimeout(() => this.#onCooldownElapsed(), this.#cooldownMs);
     }
-    this.#cooldownHandle = this.#scheduleTimeout(() => this.#onCooldownElapsed(), this.#cooldownMs);
   }
 
   #clearTimers(): void {

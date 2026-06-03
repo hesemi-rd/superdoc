@@ -101,22 +101,6 @@ describe('FontLateLoadReflowScheduler', () => {
     expect(flushes).toHaveLength(0);
   });
 
-  it('flushNow flushes immediately; the cleared quiet timer does not double-fire', () => {
-    const { scheduler, clock, flushes } = makeScheduler();
-    scheduler.schedule(['a']);
-    scheduler.flushNow();
-    expect(flushes).toHaveLength(1);
-    expect(flushes[0].reason).toBe('manual');
-    clock.advance(250);
-    expect(flushes).toHaveLength(1);
-  });
-
-  it('flushNow is a no-op when nothing is pending', () => {
-    const { scheduler, flushes } = makeScheduler();
-    scheduler.flushNow();
-    expect(flushes).toHaveLength(0);
-  });
-
   it('starts a fresh quiet window after the cooldown drains idle', () => {
     const { scheduler, clock, flushes } = makeScheduler({ quietMs: 250, cooldownMs: 2000 });
     scheduler.schedule(['a']);

@@ -272,14 +272,32 @@ export class FontReadinessGate {
   notifyFontConfigChanged(): void {
     this.#fontConfigVersion += 1;
     bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
-    this.#seenAvailable.clear();
-    this.#seenAvailableFaces.clear();
-    this.#requiredSignature = '';
-    // Drop any pending batched late-load reflow: this immediate reflow supersedes it, so a
-    // stale batch must not fire a second reflow just after.
+    // Reset the required + seen sets so an in-flight `loadingdone` can't re-arm a reflow for a
+    // face this immediate reflow already corrects; the next pass re-plans from scratch.
+    this.#resetRequiredAndSeen();
+    // Drop any pending batched late-load reflow: this immediate reflow supersedes it.
     this.#lateLoadScheduler.cancel();
     this.#invalidateCaches();
     this.#requestReflow();
+  }
+
+  /**
+   * Reset late-load state for a document swap: cancel the pending batched reflow and drop the
+   * prior document's required/seen sets, so a flush armed under the old document cannot fire a
+   * spurious reflow against the new one. The new document's own render re-plans and invalidates.
+   */
+  resetForDocumentChange(): void {
+    this.#lateLoadScheduler.cancel();
+    this.#resetRequiredAndSeen();
+  }
+
+  /** Clear the per-document required + seen face/family sets and the required-set signature. */
+  #resetRequiredAndSeen(): void {
+    this.#requiredSignature = '';
+    this.#requiredFaceKeys = new Set();
+    this.#requiredFamilies = new Set();
+    this.#seenAvailable.clear();
+    this.#seenAvailableFaces.clear();
   }
 
   /** Remove the late-load listener and cancel any pending batched reflow. Call on teardown. */
@@ -364,14 +382,23 @@ export class FontReadinessGate {
     }
 
     if (changedKeys.length === 0) return;
+    // The available-font picture changed NOW, so bump the epoch and clear the measurement
+    // caches immediately - measure caches are keyed without the epoch (fontMetricsCache is
+    // `family|size|bold|italic`), so this explicit clear is the only thing that busts them,
+    // and any re-measure/paint before the batched reflow must already see the loaded font.
+    // Only the expensive full reflow is deferred to the scheduler so arrival waves coalesce.
+    this.#fontConfigVersion += 1;
+    bumpFontConfigVersion(); // bump the global epoch so paint reuse signatures bust
+    this.#invalidateCaches();
     this.#lateLoadScheduler.schedule(changedKeys);
   }
 
-  /** One batched correction for late-loaded faces: bump epoch, invalidate caches, reflow. */
+  /**
+   * The batched late-load correction: only the expensive re-measure/reflow. The epoch bump and
+   * cache invalidation already fired synchronously in `#onLoadingDone`, so the document is never
+   * left measuring against stale caches while the reflow waits out the scheduler's window.
+   */
   #flushLateFontLoads(): void {
-    this.#fontConfigVersion += 1;
-    bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
-    this.#invalidateCaches();
     this.#requestReflow();
   }
 }
@@ -423,7 +450,14 @@ function summarize(results: FontLoadResult[]): FontLoadSummary {
 
 // Status precedence for rolling per-face outcomes up to a family: a settled failure must
 // never be masked by a loaded sibling. Mirrors FontRegistry.getStatus's rollup order.
-const FACE_STATUS_PRIORITY: FontLoadStatus[] = ['failed', 'timed_out', 'fallback_used', 'loaded', 'loading', 'unloaded'];
+const FACE_STATUS_PRIORITY: FontLoadStatus[] = [
+  'failed',
+  'timed_out',
+  'fallback_used',
+  'loaded',
+  'loading',
+  'unloaded',
+];
 
 function summarizeFaces(results: FontFaceLoadResult[]): FontLoadSummary {
   // FontLoadSummary's counts are documented as distinct physical FAMILIES and ride the

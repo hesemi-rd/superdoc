@@ -197,10 +197,13 @@ describe('FontReadinessGate', () => {
     clock.advance(100); // still within the quiet window
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Caladea' }] });
     expect(requestReflow).not.toHaveBeenCalled();
+    // Caches + epoch are cleared immediately as each face arrives (measure caches are not
+    // epoch-keyed), so a re-measure in the quiet window already sees the loaded font.
+    expect(invalidateCaches).toHaveBeenCalledTimes(2);
+    expect(gate.fontConfigVersion).toBe(2);
 
     clock.advance(300);
-    expect(requestReflow).toHaveBeenCalledTimes(1); // one reflow for both faces
-    expect(gate.fontConfigVersion).toBe(1);
+    expect(requestReflow).toHaveBeenCalledTimes(1); // but only ONE (expensive) reflow for both
   });
 
   it('does not reflow again on a second loadingdone for the same face (no loop)', async () => {
@@ -236,12 +239,13 @@ describe('FontReadinessGate', () => {
     await gate.ensureReadyForMeasure();
 
     registry.statuses.set('Carlito', 'loaded');
-    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // schedules a flush
+    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // invalidates now; schedules the reflow
     gate.dispose();
     clock.advance(5000);
 
+    // The cache clear is immediate (on load, before dispose); dispose cancels the pending reflow.
+    expect(invalidateCaches).toHaveBeenCalledTimes(1);
     expect(requestReflow).not.toHaveBeenCalled();
-    expect(invalidateCaches).not.toHaveBeenCalled();
   });
 
   it('notifyFontConfigChanged bumps the epoch, invalidates, and reflows immediately (not batched)', () => {
@@ -360,10 +364,13 @@ describe('FontReadinessGate', () => {
       expect(requestReflow).toHaveBeenCalledTimes(1);
       expect(invalidateCaches).toHaveBeenCalledTimes(1);
 
-      // A second loadingdone for the same face does not reflow again (no loop).
+      // A second loadingdone for the SAME face must not reflow again. Drain the full cooldown:
+      // a broken dedup would re-invalidate immediately AND flush a trailing reflow at cooldown
+      // end, so advancing past it (not just 300ms inside it) is what makes this assertion real.
       fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'bold', style: 'normal' }] });
-      clock.advance(300);
+      clock.advance(2500); // past the post-flush cooldown (2000ms)
       expect(requestReflow).toHaveBeenCalledTimes(1);
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
     });
 
     it('falls back to the family path when face planning throws', async () => {
