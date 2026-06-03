@@ -3046,6 +3046,20 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Clear per-document `fonts-changed` report state on a document swap (same editor, new document).
+   * Without this the new document could inherit the prior document's pending config-change source,
+   * replay its last payload to a late subscriber, or - if it happens to share the prior
+   * version|statusKey - have its first report SKIPPED by the dedup. Cleared so the new document
+   * re-emits from scratch (its first report is `initial`). Pairs with the gate + resolver resets
+   * at this same lifecycle boundary.
+   */
+  #resetFontReportStateForDocumentChange(): void {
+    this.#nextFontsChangedSource = null;
+    this.#lastFontsChangedKey = null;
+    this.#lastFontsChangedPayload = null;
+  }
+
+  /**
    * Expose the current layout engine options.
    */
   getLayoutOptions(): LayoutEngineOptions {
@@ -5105,6 +5119,7 @@ export class PresentationEditor extends EventEmitter {
       // flush armed under the old document reflows the new one, or a prior `fonts.map` leaks in.
       this.#fontGate?.resetForDocumentChange();
       this.#fontController.reset();
+      this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };
     this.#editor.on('documentReplaced', handleDocumentReplaced);
