@@ -3,7 +3,7 @@ import type { FontReadinessGate } from './FontReadinessGate.js';
 
 /** One physical font face: a URL source plus optional weight/style (default 400/normal). */
 export interface ManagedFontFace {
-  /** A URL the FontFace loads ('/fonts/x.woff2' or 'url(...)'). v1 is URL-only; no binary sources. */
+  /** A plain URL the face loads (e.g. '/fonts/x.woff2'); normalized to a CSS url(...) internally. v1 is URL-only. */
   source: string;
   /** Font weight (e.g. 400, 700, 'bold'); defaults to 400. */
   weight?: number | string;

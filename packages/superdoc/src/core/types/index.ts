@@ -90,7 +90,7 @@ export type {
  */
 /** One physical font face to register: a URL source plus optional weight/style. */
 export interface SuperDocFontFace {
-  /** A URL the browser loads ('/fonts/Gelasio-Regular.woff2' or 'url(...)'). */
+  /** A plain URL the browser loads, e.g. '/fonts/Gelasio-Regular.woff2' or 'https://cdn/...'. */
   source: string;
   /** Font weight (e.g. 400, 700, 'bold'); defaults to 400. */
   weight?: number | string;

@@ -172,6 +172,8 @@ import type {
   SuperDocExceptionPayload,
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
+  SuperDocFontFace,
+  SuperDocFontFamily,
   SuperDocFontsApi,
   SuperDocLayoutEngineOptions,
   SuperDocLockedPayload,
@@ -362,6 +364,8 @@ const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditor
 const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
+const _real_SuperDocFontFace: AssertNotAny<SuperDocFontFace> = true;
+const _real_SuperDocFontFamily: AssertNotAny<SuperDocFontFamily> = true;
 const _real_SuperDocFontsApi: AssertNotAny<SuperDocFontsApi> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
 const _real_SuperDocLockedPayload: AssertNotAny<SuperDocLockedPayload> = true;

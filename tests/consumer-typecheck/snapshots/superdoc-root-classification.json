@@ -1819,9 +1819,31 @@
       "inCjs": false
     },
     {
+      "name": "SuperDocFontFace",
+      "bucket": "supported-root",
+      "rationale": "Public font-face shape for superdoc.fonts.add (URL source + optional weight/style).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontFamily",
+      "bucket": "supported-root",
+      "rationale": "Public font-family shape for superdoc.fonts.add (family name + faces).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocFontsApi",
       "bucket": "supported-root",
-      "rationale": "Return type of the public superdoc.fonts read surface (getReport/getMissingFonts/getDocumentFonts/onReport).",
+      "rationale": "Return type of the public superdoc.fonts read + write surface (getReport/getMissingFonts/getDocumentFonts/onReport + map/unmap/add/preload).",
       "confidence": "high",
       "source": "locked",
       "inDts": true,
