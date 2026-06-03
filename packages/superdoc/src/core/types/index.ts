@@ -84,8 +84,9 @@ export type {
  * substitution- and load-aware answer to "what fonts does this document use and did
  * SuperDoc render them faithfully", pulled on demand. The same report streams via the
  * `fonts-changed` event / `onFontsChanged`. All three reflect the active editor; they
- * return empty arrays when no editor is active. The write surface (add/map/preload) is
- * deferred. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
+ * return empty arrays when no editor is active. The write surface starts with {@link map}
+ * (override font resolution per document); `add`/`preload` for registering and loading faces
+ * follow. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
  * fonts (font table + theme + defaults), not only fonts visible on screen.
  */
 export interface SuperDocFontsApi {
@@ -103,6 +104,15 @@ export interface SuperDocFontsApi {
    * delivered until it does (no stale prior-document report). Returns an unsubscribe function.
    */
   onReport(callback: (payload: FontsChangedPayload) => void): () => void;
+  /**
+   * Map a logical family to a physical render family for the ACTIVE document, overriding the
+   * bundled default (e.g. `map('Georgia', 'Gelasio')`). Re-measures and repaints the document so
+   * the change is visible immediately; observe completion via {@link onReport} / `fonts-changed`.
+   * The physical family must be one the registry can load (a bundled substitute, or a face
+   * registered via `add`). No-op when no editor is active. Other editors on the page are
+   * unaffected - mapping is per document.
+   */
+  map(logicalFamily: string, physicalFamily: string): void;
 }
 
 /**

@@ -974,16 +974,9 @@ export class PresentationEditor extends EventEmitter {
           const converter = (this.#editor as Editor & { converter?: { getDocumentFonts?: () => string[] } }).converter;
           return converter?.getDocumentFonts?.() ?? [];
         },
-        requestReflow: () => {
-          // A font finished loading (or the resolution changed). Incremental layout reuses
-          // this editor's previousMeasures for unchanged blocks, so clearing the global
-          // measurement caches alone will not re-measure. Drop the cached blocks + measures
-          // to force a full re-measure, then schedule a DOCUMENT re-layout - #scheduleRerender
-          // with the pending-change flag, not #selectionSync.requestRender (selection-only).
-          this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
-          this.#pendingDocChange = true;
-          this.#scheduleRerender();
-        },
+        // A font finished loading: reflow so unchanged blocks re-measure (see #requestFontReflow;
+        // shared with mapFont, which reflows on a resolution change).
+        requestReflow: () => this.#requestFontReflow(),
         // Face-aware required set: the exact physical faces (family + weight + style) the
         // rendered document uses, from the planner walking the current layout blocks. The
         // gate awaits these - so bold/italic load before measure and declared-but-unused
@@ -2942,6 +2935,36 @@ export class PresentationEditor extends EventEmitter {
     return this.getFontReport()
       .filter((record) => record.missing)
       .map((record) => record.logicalFamily);
+  }
+
+  /**
+   * Map a logical family to a physical render family for THIS document, overriding the bundled
+   * default (e.g. "Georgia" -> "Gelasio"), then reflow so the change is measured and painted. The
+   * physical family must be one the registry can load (bundled, or registered via `addFont`).
+   * Per-document: only this editor's resolver + layout change; other editors on the page are
+   * untouched. Surfaced as `superdoc.fonts.map()`.
+   */
+  mapFont(logicalFamily: string, physicalFamily: string): void {
+    this.#fontResolver.map(logicalFamily, physicalFamily);
+    // The mapping changed, so the current layout was measured and painted with the old physical
+    // family. Reflow exactly as a late font load does: the re-layout re-plans the new physical
+    // face (the gate awaits it before measure), re-measures against the new resolver signature,
+    // and repaints. previousMeasures reuse is already gated by the signature, but the reflow
+    // clears the cached measures to force the re-measure regardless.
+    this.#requestFontReflow();
+  }
+
+  /**
+   * Drop this editor's cached blocks + measures and schedule a full document re-layout. Shared by
+   * the font-readiness gate (a late font load) and {@link mapFont} (a resolution change):
+   * incremental layout reuses previousMeasures for unchanged blocks, so clearing them is what
+   * forces the re-measure; the pending-change flag routes through the document re-layout path
+   * (not the selection-only render).
+   */
+  #requestFontReflow(): void {
+    this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
   }
 
   /**

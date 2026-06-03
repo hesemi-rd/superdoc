@@ -1653,6 +1653,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
           this.on('fonts-changed', callback);
           return () => this.off('fonts-changed', callback);
         },
+        // Active-editor scoped, like the read methods: maps on the active document's resolver and
+        // reflows it. No-op when no editor is active (optional chaining). Per-document by design.
+        map: (logicalFamily, physicalFamily) =>
+          this.activeEditor?.presentationEditor?.mapFont(logicalFamily, physicalFamily),
       };
     }
     return this.#fontsApi;
