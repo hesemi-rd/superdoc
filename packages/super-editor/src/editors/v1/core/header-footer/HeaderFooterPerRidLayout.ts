@@ -10,7 +10,7 @@ import {
 } from '@superdoc/layout-bridge';
 import type { HeaderFooterLayoutResult, HeaderFooterConstraints } from '@superdoc/layout-bridge';
 import { measureBlock } from '@superdoc/measuring-dom';
-import type { FontResolver } from '@superdoc/font-system';
+import type { FontResolver, FontMeasureContext } from '@superdoc/font-system';
 
 export type HeaderFooterPerRidLayoutInput = {
   headerBlocks?: unknown;
@@ -125,8 +125,10 @@ async function layoutBlocksByRId(
 
   // Bind the per-document resolver into the measure callback, and derive its signature for the
   // (cross-document) header/footer cache key. Undefined resolver => global default + '' signature.
-  const resolvePhysical = fontResolver ? (css: string) => fontResolver.resolvePhysicalFamily(css) : undefined;
   const fontSignature = fontResolver?.signature ?? '';
+  const fontMeasureContext: FontMeasureContext | undefined = fontResolver
+    ? { resolvePhysical: (css: string) => fontResolver.resolvePhysicalFamily(css), fontSignature }
+    : undefined;
 
   for (const [rId, blocks] of blocksByRId) {
     if (!referencedRIds.has(rId)) continue;
@@ -136,7 +138,7 @@ async function layoutBlocksByRId(
       const batchResult = await layoutHeaderFooterWithCache(
         { default: blocks },
         constraints,
-        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, resolvePhysical),
+        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, fontMeasureContext),
         undefined,
         undefined,
         pageResolver,
@@ -231,8 +233,10 @@ async function layoutWithPerSectionConstraints(
   if (!blocksByRId) return;
 
   // See layoutBlocksByRId: bind the per-document resolver + derive its cache signature.
-  const resolvePhysical = fontResolver ? (css: string) => fontResolver.resolvePhysicalFamily(css) : undefined;
   const fontSignature = fontResolver?.signature ?? '';
+  const fontMeasureContext: FontMeasureContext | undefined = fontResolver
+    ? { resolvePhysical: (css: string) => fontResolver.resolvePhysicalFamily(css), fontSignature }
+    : undefined;
 
   const groups = buildSectionAwareHeaderFooterMeasurementGroups(
     kind,
@@ -250,7 +254,7 @@ async function layoutWithPerSectionConstraints(
       const batchResult = await layoutHeaderFooterWithCache(
         { default: blocks },
         group.sectionConstraints,
-        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, resolvePhysical),
+        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, fontMeasureContext),
         undefined,
         undefined,
         pageResolver,

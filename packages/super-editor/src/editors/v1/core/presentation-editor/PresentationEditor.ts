@@ -542,10 +542,12 @@ export class PresentationEditor extends EventEmitter {
   /**
    * This document's logical->physical font resolver. Per-instance (per document) so two
    * editors can map the same logical family differently without leaking. Planner, gate, report,
-   * MEASURE (body, footnotes, header/footer, per-rId header/footer, and field-annotation pills),
-   * and PAINT all resolve through THIS instance, and its signature keys every measure cache AND
-   * every paint-reuse version, so two documents with different mappings can never share a measure
-   * or reuse each other's painted DOM. `superdoc.fonts.map` mutates it at runtime through the
+   * MEASURE (body, footnotes, header/footer, per-rId header/footer, field-annotation pills, table
+   * AutoFit column widths, and line-height metrics), and document-content PAINT (text, field
+   * annotations, list markers, drop caps) resolve through THIS instance; its signature keys the
+   * measure caches and the paint-reuse version, so two documents with different mappings do not
+   * share a measure or reuse each other's content paint. (Editor chrome such as formatting marks is
+   * not document content and is out of scope.) `superdoc.fonts.map` mutates it at runtime through the
    * document font controller (the only writer): the changed signature re-measures and repaints
    * THIS document while others are left untouched. Seeded with the bundled clean-clone map.
    */
@@ -999,8 +1001,9 @@ export class PresentationEditor extends EventEmitter {
         // fonts are not fetched. Reads the blocks stashed just before each gate await.
         getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks, this.#fontResolver),
         // The document's resolver: the gate derives the family-path resolution from it and
-        // resolves its report through it (load + diagnostics). Measure and paint resolve through
-        // the same instance, so load, measure, paint, and diagnostics all agree.
+        // resolves its report through it (load + diagnostics). The document's measure and
+        // content-paint paths resolve through this same instance, so load, measure, paint, and
+        // diagnostics stay consistent.
         fontResolver: this.#fontResolver,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.
@@ -5139,6 +5142,10 @@ export class PresentationEditor extends EventEmitter {
       // instance-level fonts config before the rerender.
       this.#fontGate?.resetForDocumentChange();
       this.#fontController.reset();
+      // Reset the layout signature too: the prior document's value must not gate the new document's
+      // previous-measure reuse. Benign if left stale (it only over-invalidates reuse), but resetting
+      // here states the intent and starts the swap from a clean signature.
+      this.#layoutFontSignature = '';
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
       this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
@@ -6813,10 +6820,15 @@ export class PresentationEditor extends EventEmitter {
       // (so measurement uses THIS document's physical substitutes) and capture its signature for
       // the measure-cache keys. previousFontSignature is the signature the prior measures were
       // produced with - if it differs, incrementalLayout must not reuse them (the reuse fast
-      // path bypasses the cache key). PR1 has no public `fonts.map`, so the signature stays ''.
+      // path bypasses the cache key). The signature is '' for a document with no runtime overrides
+      // and becomes non-empty once the public `superdoc.fonts.*` API maps a family - which is when
+      // this document's measures must not be shared with a default or differently-mapped document.
       const resolvePhysical = (css: string): string => this.#fontResolver.resolvePhysicalFamily(css);
       const fontSignature = this.#fontResolver.signature;
       const previousFontSignature = this.#layoutFontSignature;
+      // One context object so the measure callback and the cache signature can never drift:
+      // both the resolver and the fontSignature passed to incrementalLayout come from here.
+      const fontMeasureContext = { resolvePhysical, fontSignature };
 
       let layout: Layout;
       let measures: Measure[];
@@ -6868,10 +6880,12 @@ export class PresentationEditor extends EventEmitter {
           blocksForLayout,
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) =>
-            measureBlock(block, constraints, resolvePhysical),
+            measureBlock(block, constraints, fontMeasureContext),
           headerFooterInput ?? undefined,
           previousMeasures,
-          { fontSignature, previousFontSignature },
+          // Same context object the measure callback uses, so the cache signature and the resolver
+          // cannot drift (the two-channel split is retired here).
+          { fontContext: fontMeasureContext, previousFontSignature },
         );
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
