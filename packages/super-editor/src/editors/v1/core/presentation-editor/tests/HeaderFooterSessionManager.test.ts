@@ -1996,4 +1996,526 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.footerRegions.get(0)!.displayPageNumberValue).toBe(3);
     });
   });
+
+  describe('getHeaderFooterLayoutSnapshot — read-only story-part snapshot', () => {
+    function buildSnapshotManager(editor: Editor = createMainEditorStub()): HeaderFooterSessionManager {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+      const m = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      m.setDependencies(deps);
+      return m;
+    }
+
+    function makeResult(
+      kind: 'header' | 'footer',
+      blockId: string,
+      options?: { y?: number; pageNumber?: number },
+    ): HeaderFooterLayoutResult {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId,
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: options?.y ?? 10,
+        width: 468,
+      };
+      return {
+        kind,
+        type: 'default',
+        layout: { height: 50, pages: [{ number: options?.pageNumber ?? 1, fragments: [paraFragment] }] },
+        blocks: [{ kind: 'paragraph', id: blockId, runs: [] }] as FlowBlock[],
+        measures: [
+          {
+            kind: 'paragraph',
+            lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 100, ascent: 10, descent: 3, lineHeight: 18 }],
+            totalHeight: 18,
+          },
+        ] as unknown as Measure[],
+      };
+    }
+
+    const PER_RID_INPUT = {
+      headerBlocksByRId: new Map(),
+      footerBlocksByRId: new Map(),
+      constraints: {
+        width: 468,
+        height: 648,
+        pageWidth: 612,
+        pageHeight: 792,
+        margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+        overflowBaseHeight: 36,
+      },
+    } as const;
+
+    it('returns an empty but well-formed snapshot when there are no headers/footers', () => {
+      manager = buildSnapshotManager();
+
+      const snapshot = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(snapshot).toEqual({
+        pageBindings: [],
+        storyLayouts: { headers: [], footers: [] },
+      });
+      // Plain, JSON-safe data round-trips without loss.
+      expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+    });
+
+    it('omits fallback margin-box page bindings when no header/footer story is bound', () => {
+      manager = buildSnapshotManager();
+
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: {},
+              footerRefs: {},
+            },
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      manager.updateDecorationProviders(layout);
+
+      expect(manager.headerRegions.size).toBe(1);
+      expect(manager.footerRegions.size).toBe(1);
+      expect(manager.getHeaderFooterLayoutSnapshot()).toEqual({
+        pageBindings: [],
+        storyLayouts: { headers: [], footers: [] },
+      });
+    });
+
+    it('preserves header contentHeight from the decoration payload in page bindings', () => {
+      manager = buildSnapshotManager();
+      manager.headerFooterIdentifier = {
+        headerIds: { default: 'rId-header-default', first: null, even: null, odd: null },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.setLayoutResults([makeResult('header', 'header-block')], null);
+
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: {},
+            },
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      manager.updateDecorationProviders(layout);
+
+      expect(manager.headerRegions.get(0)!.contentHeight).toBe(50);
+      expect(manager.getHeaderFooterLayoutSnapshot().pageBindings[0]!.header!.region!.contentHeight).toBe(50);
+    });
+
+    it('exposes per-page bindings and per-story raw/resolved summaries from the real maps', async () => {
+      manager = buildSnapshotManager();
+
+      mockLayoutPerRIdHeaderFooters.mockImplementation(
+        async (
+          _input: unknown,
+          _layout: unknown,
+          _sectionMetadata: unknown,
+          deps: {
+            headerLayoutsByRId: Map<string, HeaderFooterLayoutResult>;
+            footerLayoutsByRId: Map<string, HeaderFooterLayoutResult>;
+          },
+        ) => {
+          deps.headerLayoutsByRId.set('rId-header-default', makeResult('header', 'header-block'));
+          deps.footerLayoutsByRId.set('rId-footer-default', makeResult('footer', 'footer-block'));
+        },
+      );
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, sectionIndex: 0 } as never],
+      } as unknown as Layout;
+      await manager.layoutPerRId(PER_RID_INPUT, layout, [{ sectionIndex: 0 } as never]);
+
+      manager.headerRegions.set(0, {
+        kind: 'header',
+        headerFooterRefId: 'rId-header-default',
+        sectionType: 'default',
+        sectionId: 'section-0',
+        sectionIndex: 0,
+        pageIndex: 0,
+        pageNumber: 1,
+        localX: 72.0001,
+        localY: 36,
+        width: 468,
+        height: 36,
+      });
+      manager.footerRegions.set(0, {
+        kind: 'footer',
+        headerFooterRefId: 'rId-footer-default',
+        sectionType: 'default',
+        sectionId: 'section-0',
+        sectionIndex: 0,
+        pageIndex: 0,
+        pageNumber: 1,
+        localX: 72,
+        localY: 720,
+        width: 468,
+        height: 36,
+        contentHeight: 20,
+      });
+
+      const snapshot = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(snapshot.pageBindings).toHaveLength(1);
+      const binding = snapshot.pageBindings[0]!;
+      expect(binding).toMatchObject({ pageIndex: 0, pageNumber: 1, sectionIndex: 0 });
+      expect(binding.header).toMatchObject({
+        storyKey: 'header::rId-header-default',
+        refId: 'rId-header-default',
+        variant: 'default',
+      });
+      // Geometry is rounded to 3 decimals.
+      expect(binding.header!.region).toEqual({ localX: 72, localY: 36, width: 468, height: 36, contentHeight: null });
+      expect(binding.footer).toMatchObject({ storyKey: 'footer::rId-footer-default', refId: 'rId-footer-default' });
+      expect(binding.footer!.region!.contentHeight).toBe(20);
+
+      expect(snapshot.storyLayouts.headers).toHaveLength(1);
+      const headerStory = snapshot.storyLayouts.headers[0]!;
+      expect(headerStory.storyKey).toBe('header::rId-header-default');
+      expect(headerStory.kind).toBe('header');
+      expect(headerStory.refId).toBe('rId-header-default');
+      expect(headerStory.sectionIndices).toEqual([0]);
+      expect(headerStory.rawLayout).not.toBeNull();
+      expect(headerStory.rawLayout!.pages[0]!.fragments[0]).toEqual({
+        kind: 'para',
+        blockId: 'header-block',
+        x: 72,
+        y: 10,
+        width: 468,
+        height: null,
+      });
+      // Resolved summary is populated from the manager's resolved-by-rId map.
+      expect(headerStory.resolvedLayout).not.toBeNull();
+      expect(headerStory.resolvedLayout!.pages[0]!.items.length).toBeGreaterThan(0);
+      expect(headerStory.resolvedLayout!.pages[0]!.items[0]!.blockId).toBe('header-block');
+
+      expect(snapshot.storyLayouts.footers).toHaveLength(1);
+      expect(snapshot.storyLayouts.footers[0]!.refId).toBe('rId-footer-default');
+
+      // No Maps, class instances, or undefined leak into serialized output.
+      expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+    });
+
+    it('produces distinct, section-aware story keys when the same refId is reused across sections', async () => {
+      manager = buildSnapshotManager();
+
+      mockLayoutPerRIdHeaderFooters.mockImplementation(
+        async (
+          _input: unknown,
+          _layout: unknown,
+          _sectionMetadata: unknown,
+          deps: { headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> },
+        ) => {
+          deps.headerLayoutsByRId.set('rId-shared::s0', makeResult('header', 'block-s0'));
+          deps.headerLayoutsByRId.set('rId-shared::s1', makeResult('header', 'block-s1'));
+        },
+      );
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, sectionIndex: 0 } as never, { number: 2, sectionIndex: 1 } as never],
+      } as unknown as Layout;
+      await manager.layoutPerRId(PER_RID_INPUT, layout, [
+        { sectionIndex: 0 } as never,
+        { sectionIndex: 1 } as never,
+      ]);
+
+      manager.headerRegions.set(0, {
+        kind: 'header',
+        headerFooterRefId: 'rId-shared',
+        sectionType: 'default',
+        sectionId: 'section-0',
+        sectionIndex: 0,
+        pageIndex: 0,
+        pageNumber: 1,
+        localX: 72,
+        localY: 36,
+        width: 468,
+        height: 36,
+      });
+      manager.headerRegions.set(1, {
+        kind: 'header',
+        headerFooterRefId: 'rId-shared',
+        sectionType: 'default',
+        sectionId: 'section-1',
+        sectionIndex: 1,
+        pageIndex: 1,
+        pageNumber: 2,
+        localX: 72,
+        localY: 36,
+        width: 468,
+        height: 36,
+      });
+
+      const snapshot = manager.getHeaderFooterLayoutSnapshot();
+
+      // Page bindings resolve to section-aware keys, not a bare refId.
+      expect(snapshot.pageBindings.map((b) => b.header!.storyKey)).toEqual([
+        'header::rId-shared::s0',
+        'header::rId-shared::s1',
+      ]);
+
+      const storyKeys = snapshot.storyLayouts.headers.map((s) => s.storyKey);
+      expect(storyKeys).toEqual(['header::rId-shared::s0', 'header::rId-shared::s1']);
+      // Same underlying part, distinct section-aware identities.
+      expect(snapshot.storyLayouts.headers.every((s) => s.refId === 'rId-shared')).toBe(true);
+      expect(snapshot.storyLayouts.headers[0]!.sectionIndices).toEqual([0]);
+      expect(snapshot.storyLayouts.headers[1]!.sectionIndices).toEqual([1]);
+    });
+
+    it('per-page bindings match the resolved first/even/default variant selection', () => {
+      manager = buildSnapshotManager();
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier(
+          [
+            {
+              sectionIndex: 0,
+              titlePg: true,
+              headerRefs: { first: 'rId-first', even: 'rId-even', default: 'rId-default' },
+            },
+          ],
+          { alternateHeaders: true },
+        ),
+      );
+      manager.headerLayoutsByRId.set('rId-first', makeResult('header', 'first-block', { pageNumber: 1 }));
+      manager.headerLayoutsByRId.set('rId-even', makeResult('header', 'even-block', { pageNumber: 2 }));
+      manager.headerLayoutsByRId.set('rId-default', makeResult('header', 'default-block', { pageNumber: 3 }));
+
+      const sectionRefs = {
+        headerRefs: { first: 'rId-first', even: 'rId-even', default: 'rId-default' },
+        footerRefs: {},
+      };
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs,
+          } as unknown as ResolvedPage,
+          {
+            number: 2,
+            sectionIndex: 0,
+            effectivePageNumber: 2,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs,
+          } as unknown as ResolvedPage,
+          {
+            number: 3,
+            sectionIndex: 0,
+            effectivePageNumber: 3,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs,
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      // Real decoration-provider path resolves the active variant per page and
+      // stamps the concrete refId onto each region.
+      manager.updateDecorationProviders(layout);
+
+      const snapshot = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(snapshot.pageBindings).toHaveLength(3);
+      expect(snapshot.pageBindings[0]!.header).toMatchObject({ variant: 'first', refId: 'rId-first' });
+      expect(snapshot.pageBindings[1]!.header).toMatchObject({ variant: 'even', refId: 'rId-even' });
+      // Odd page with no odd ref resolves to the default header part.
+      expect(snapshot.pageBindings[2]!.header).toMatchObject({ variant: 'default', refId: 'rId-default' });
+
+      // The first/even/default stories are all surfaced and distinct.
+      expect(snapshot.storyLayouts.headers.map((s) => s.refId).sort()).toEqual(['rId-default', 'rId-even', 'rId-first']);
+    });
+
+    it('keeps page-binding story keys joinable when only variant-based layouts are available', () => {
+      manager = buildSnapshotManager();
+      manager.headerFooterIdentifier = {
+        headerIds: { default: 'rId-header-default', first: null, even: null, odd: null },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.setLayoutResults([makeResult('header', 'default-block')], null);
+
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: {},
+            },
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      manager.updateDecorationProviders(layout);
+
+      const snapshot = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(snapshot.pageBindings).toHaveLength(1);
+      expect(snapshot.pageBindings[0]!.header).toMatchObject({
+        storyKey: 'header::rId-header-default::s0',
+        refId: 'rId-header-default',
+        variant: 'default',
+      });
+      expect(snapshot.storyLayouts.headers).toHaveLength(1);
+      expect(snapshot.storyLayouts.headers[0]).toMatchObject({
+        storyKey: 'header::rId-header-default::s0',
+        refId: 'rId-header-default',
+        sectionIndices: [0],
+      });
+    });
+
+    it('returns deterministic snapshots across repeated calls', async () => {
+      manager = buildSnapshotManager();
+      mockLayoutPerRIdHeaderFooters.mockImplementation(
+        async (
+          _input: unknown,
+          _layout: unknown,
+          _sectionMetadata: unknown,
+          deps: { headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> },
+        ) => {
+          // Insert out of natural order to prove the builder sorts deterministically.
+          deps.headerLayoutsByRId.set('rId-10', makeResult('header', 'block-10'));
+          deps.headerLayoutsByRId.set('rId-2', makeResult('header', 'block-2'));
+        },
+      );
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, sectionIndex: 0 } as never],
+      } as unknown as Layout;
+      await manager.layoutPerRId(PER_RID_INPUT, layout, [{ sectionIndex: 0 } as never]);
+
+      const first = manager.getHeaderFooterLayoutSnapshot();
+      const second = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+      // Natural ordering: rId-2 before rId-10.
+      expect(first.storyLayouts.headers.map((s) => s.storyKey)).toEqual(['header::rId-2', 'header::rId-10']);
+    });
+
+    it('returns the last published snapshot while a new header/footer snapshot is still pending publication', async () => {
+      manager = buildSnapshotManager();
+
+      mockLayoutPerRIdHeaderFooters.mockImplementation(
+        async (
+          _input: unknown,
+          _layout: unknown,
+          _sectionMetadata: unknown,
+          deps: { headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> },
+        ) => {
+          deps.headerLayoutsByRId.set('rId-header-default', makeResult('header', 'old-block'));
+        },
+      );
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, sectionIndex: 0 } as never],
+      } as unknown as Layout;
+      await manager.layoutPerRId(PER_RID_INPUT, layout, [{ sectionIndex: 0 } as never]);
+
+      const resolvedLayout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: {},
+            },
+          } as unknown as ResolvedPage,
+        ],
+      };
+      manager.updateDecorationProviders(resolvedLayout);
+
+      const published = manager.getHeaderFooterLayoutSnapshot();
+      expect(published.storyLayouts.headers[0]!.rawLayout!.pages[0]!.fragments[0]!.blockId).toBe('old-block');
+      expect(published.storyLayouts.headers[0]!.resolvedLayout!.pages[0]!.items[0]!.blockId).toBe('old-block');
+
+      // Simulate the presentation rerender sequence after the new variant layouts
+      // have been published but before the per-rId resolved maps + regions are
+      // committed as one new snapshot.
+      manager.headerLayoutResults = [makeResult('header', 'new-block')];
+      manager.headerLayoutsByRId.clear();
+      manager.headerLayoutsByRId.set('rId-header-default', makeResult('header', 'new-block'));
+
+      const duringUpdate = manager.getHeaderFooterLayoutSnapshot();
+
+      expect(duringUpdate).toEqual(published);
+      expect(duringUpdate.storyLayouts.headers[0]!.rawLayout!.pages[0]!.fragments[0]!.blockId).toBe('old-block');
+      expect(duringUpdate.storyLayouts.headers[0]!.resolvedLayout!.pages[0]!.items[0]!.blockId).toBe('old-block');
+    });
+  });
 });

@@ -131,6 +131,7 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
+import type { HeaderFooterLayoutSnapshot } from '../header-footer/types.js';
 import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
 import type {
   StorySessionEditorFactoryInput,
@@ -2897,6 +2898,53 @@ export class PresentationEditor extends EventEmitter {
       measures: this.#layoutState.measures,
       sectionMetadata: this.#sectionMetadata,
     };
+  }
+
+  /**
+   * Return the live inputs that fed the most recent `resolveLayout` / paint pass.
+   *
+   * Unlike {@link getLayoutSnapshot}, whose `blocks` / `measures` are the
+   * body-only set used for pagination, this exposes the lookup blocks/measures
+   * the real paint path resolved against — including any extra blocks/measures
+   * v1 injected (e.g. footnote bodies and separators). Consumers that re-resolve
+   * the snapshot must use these so resolved geometry matches what was painted.
+   *
+   * Read-only: returns the last captured inputs and never triggers new layout
+   * work. Falls back to the body set when no extra lookup blocks were injected.
+   */
+  getLayoutResolveSnapshot(): {
+    layout: Layout | null;
+    blocks: FlowBlock[];
+    measures: Measure[];
+    sectionMetadata: SectionMetadata[];
+  } {
+    const blocks = this.#layoutLookupBlocks.length > 0 ? this.#layoutLookupBlocks : this.#layoutState.blocks;
+    const measures = this.#layoutLookupMeasures.length > 0 ? this.#layoutLookupMeasures : this.#layoutState.measures;
+    return {
+      layout: this.#layoutState.layout,
+      blocks,
+      measures,
+      sectionMetadata: this.#sectionMetadata,
+    };
+  }
+
+  /**
+   * Return the read-only header/footer story-part layout snapshot.
+   *
+   * Pass-through to {@link HeaderFooterSessionManager.getHeaderFooterLayoutSnapshot}:
+   * per-page header/footer bindings plus the raw and resolved layout for each
+   * distinct story, as deterministic JSON-safe data. Available after a normal
+   * layout pass even when the editor is not in header/footer edit mode. Returns a
+   * well-formed but empty snapshot when no header/footer session exists yet or the
+   * document has no headers/footers.
+   */
+  getHeaderFooterLayoutSnapshot(): HeaderFooterLayoutSnapshot {
+    return (
+      this.#headerFooterSession?.getHeaderFooterLayoutSnapshot() ?? {
+        pageBindings: [],
+        storyLayouts: { headers: [], footers: [] },
+      }
+    );
   }
 
   /**
