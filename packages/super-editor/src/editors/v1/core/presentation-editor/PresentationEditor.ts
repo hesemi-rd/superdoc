@@ -597,6 +597,9 @@ export class PresentationEditor extends EventEmitter {
     this.#fontGate ? this.#fontGate.resolveRegistry().hasFace(family, weight, style) : false;
   /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
   #lastFontsChangedKey: string | null = null;
+  /** Font-config epoch at the last emit, so a face-set delta (epoch unchanged) is distinguished from a
+   *  late load (epoch bumped) when labelling the `fonts-changed` source. */
+  #lastFontsChangedVersion = -1;
   /** Last emitted `fonts-changed` payload, so a late relay subscriber can replay it. */
   #lastFontsChangedPayload: FontsChangedPayload | null = null;
   /**
@@ -3112,14 +3115,21 @@ export class PresentationEditor extends EventEmitter {
     const key = `${version}|${this.#fontPlan?.effectiveSignature ?? ''}|${statusKey}`;
     if (key === this.#lastFontsChangedKey) return;
     const isInitial = this.#lastFontsChangedKey === null;
+    // The epoch (gate.fontConfigVersion) bumps on a late load and on a config mutation, but NOT on
+    // ordinary editing - so an unchanged epoch with a changed key means the rendered face set changed
+    // from editing (e.g. the first Bold of a family), not a font load.
+    const epochBumped = !isInitial && version !== this.#lastFontsChangedVersion;
     this.#lastFontsChangedKey = key;
+    this.#lastFontsChangedVersion = version;
     // Consume the pending source flag: a runtime mapping change (set by the font controller) is a
-    // 'config-change', but the FIRST emit is always 'initial' - the document's initial font
-    // picture, even when a config-time map ran before first layout. Otherwise a font load is
-    // 'late-load'.
+    // 'config-change'. The FIRST emit is always 'initial'. Otherwise an epoch bump is a font
+    // 'late-load'; a key change with NO epoch bump is a 'render-change' (face-set delta from editing),
+    // not a late load - consumers filtering on 'late-load' must not see spurious load signals on typing.
     const pendingSource = this.#nextFontsChangedSource;
     this.#nextFontsChangedSource = null;
-    const source: FontsChangedPayload['source'] = isInitial ? 'initial' : (pendingSource ?? 'late-load');
+    const source: FontsChangedPayload['source'] = isInitial
+      ? 'initial'
+      : (pendingSource ?? (epochBumped ? 'late-load' : 'render-change'));
 
     let resolutions: FontResolutionRecord[];
     try {
@@ -3164,6 +3174,7 @@ export class PresentationEditor extends EventEmitter {
   #resetFontReportStateForDocumentChange(): void {
     this.#nextFontsChangedSource = null;
     this.#lastFontsChangedKey = null;
+    this.#lastFontsChangedVersion = -1;
     this.#lastFontsChangedPayload = null;
     // Drop the prior document's render plan so getReport() cannot leak its used-face rows before the
     // next render rebuilds the plan.
