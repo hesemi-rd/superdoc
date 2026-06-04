@@ -36,12 +36,13 @@ function toCssFontSource(url: string): string {
  * The single writer for a document's font state: `map`/`unmap` change the resolver, `add`
  * registers customer faces through the registry, and `preload` loads them. Runtime
  * `superdoc.fonts.*` and config-time `new SuperDoc({ fonts })` route through here, so every
- * mutation shares one orchestration path. Runtime mutations coalesce into one document-local
- * reflow; config-time mutations apply before the first measure with no event. Font config changes
- * are document-local (the per-document resolver
- * signature already busts this document's measure/paint caches), so a reflow goes through
- * {@link FontReadinessGate.notifyDocumentFontConfigChanged} and never bumps the global font epoch or
- * touches other editors on the page.
+ * mutation shares one orchestration path. Runtime mutations coalesce into one reflow through
+ * {@link FontReadinessGate.notifyDocumentFontConfigChanged}; config-time mutations apply before the
+ * first measure with no event. A mapping change (`map`/`unmap`) is document-local - the per-document
+ * resolver signature busts this document's measure/paint caches and other editors are untouched. A
+ * registration (`add`) changes which faces are globally available, so it is flagged to the gate as
+ * an availability change (which invalidates the shared caches and bumps the global epoch, like a
+ * late load) because the unchanged signature cannot bust them.
  */
 export class DocumentFontController {
   readonly #resolver: FontResolver;
@@ -50,6 +51,13 @@ export class DocumentFontController {
   readonly #scheduleMicrotask: (callback: () => void) => void;
   #runtimeReflowQueued = false;
   #runtimeReflowToken = 0;
+  /**
+   * True when the pending coalesced batch included a registration (a font AVAILABILITY change), so
+   * the flush tells the gate to invalidate the shared measurement caches. A mapping change alone
+   * busts them through the resolver signature; a registration leaves the signature unchanged, so
+   * the caches would otherwise keep stale fallback widths for a now-loadable family.
+   */
+  #runtimeAvailabilityChanged = false;
 
   constructor(deps: DocumentFontControllerDeps) {
     this.#resolver = deps.resolver;
@@ -95,13 +103,19 @@ export class DocumentFontController {
   /**
    * Apply initial config before the first layout measure. Mutates the same registry/resolver state
    * as runtime writes, but does not emit `config-change` or request a reflow because the first
-   * render has not happened yet.
+   * render has not happened yet. A registration here still clears the shared measure caches (a
+   * registration cannot move the resolver signature that would otherwise bust them), so the first
+   * measure cannot reuse a stale fallback width another editor instance left in the global cache.
    */
   applyInitialConfig(config: Pick<FontsConfig, 'families' | 'map'> | null | undefined): void {
     this.#cancelPendingRuntimeReflow();
     if (!config) return;
-    this.#registerFamilies(config.families);
+    const registered = this.#registerFamilies(config.families);
     this.#applyMappings(config.map);
+    // Mappings need no clear (they move the signature, which busts this document's cache keys); a
+    // registration does not, so clear the shared measure caches. No reflow/event: first layout runs
+    // against the cleared cache, and other editors are corrected when the face loads.
+    if (registered) this.#getGate()?.invalidateCachesForConfigRegistration();
   }
 
   /**
@@ -109,11 +123,16 @@ export class DocumentFontController {
    * and mappable. Registers only - it does NOT map (call {@link map} for that). Idempotent per
    * face; a different source for an already-registered family|weight|style throws (the registry is
    * the guard). v1 sources are URLs. Registration changes which faces are available, so it reflows
-   * this document once: the gate re-plans and awaits any newly-registered face the document already
-   * uses. Export is unaffected (mapping/render only).
+   * this document once and invalidates the shared measurement caches (the resolver signature is
+   * unchanged, so it cannot bust them on its own): the gate re-plans, awaits any newly-registered
+   * face the document already uses, and re-measures it against the real font instead of stale
+   * fallback widths. Export is unaffected (mapping/render only).
    */
   add(families: FontFamilyConfig[]): void {
-    if (this.#registerFamilies(families)) this.#queueRuntimeReflow();
+    if (this.#registerFamilies(families)) {
+      this.#runtimeAvailabilityChanged = true;
+      this.#queueRuntimeReflow();
+    }
   }
 
   #registerFamilies(families: FontFamilyConfig[] | null | undefined): boolean {
@@ -179,12 +198,15 @@ export class DocumentFontController {
     this.#scheduleMicrotask(() => {
       if (!this.#runtimeReflowQueued || token !== this.#runtimeReflowToken) return;
       this.#runtimeReflowQueued = false;
+      const availabilityChanged = this.#runtimeAvailabilityChanged;
+      this.#runtimeAvailabilityChanged = false;
       this.#onDocumentFontConfigApplied();
-      this.#getGate()?.notifyDocumentFontConfigChanged();
+      this.#getGate()?.notifyDocumentFontConfigChanged({ availabilityChanged });
     });
   }
 
   #cancelPendingRuntimeReflow(): void {
+    this.#runtimeAvailabilityChanged = false;
     if (!this.#runtimeReflowQueued) return;
     this.#runtimeReflowQueued = false;
     this.#runtimeReflowToken += 1;

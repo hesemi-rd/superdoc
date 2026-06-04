@@ -38,11 +38,13 @@ class FakeRegistry {
 function makeController() {
   const registry = new FakeRegistry();
   const notifyDocumentFontConfigChanged = vi.fn();
+  const invalidateCachesForConfigRegistration = vi.fn();
   const onDocumentFontConfigApplied = vi.fn();
   const microtasks: Array<() => void> = [];
   const gate = {
     resolveRegistry: () => registry.asRegistry(),
     notifyDocumentFontConfigChanged,
+    invalidateCachesForConfigRegistration,
   } as unknown as FontReadinessGate;
   const resolver = createFontResolver();
   const controller = new DocumentFontController({
@@ -61,6 +63,7 @@ function makeController() {
     registry,
     resolver,
     notifyDocumentFontConfigChanged,
+    invalidateCachesForConfigRegistration,
     onDocumentFontConfigApplied,
     flushMicrotasks,
   };
@@ -91,6 +94,19 @@ describe('DocumentFontController', () => {
 
     expect(onDocumentFontConfigApplied).toHaveBeenCalledTimes(1);
     expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(1);
+    // The batch included a registration, so the gate must invalidate the shared measure caches:
+    // the resolver signature is unchanged for the added family, so it cannot bust them.
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledWith({ availabilityChanged: true });
+  });
+
+  it('signals a mapping-only change without an availability change (signature busts the caches)', () => {
+    const { controller, notifyDocumentFontConfigChanged, flushMicrotasks } = makeController();
+
+    controller.map({ Georgia: 'Gelasio' });
+    flushMicrotasks();
+
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(1);
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledWith({ availabilityChanged: false });
   });
 
   it('does not reflow on an idempotent add', () => {
@@ -105,12 +121,13 @@ describe('DocumentFontController', () => {
     expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('applies initial config without a runtime event or reflow', () => {
+  it('applies initial config without a runtime event or reflow, but invalidates caches for the registration', () => {
     const {
       controller,
       resolver,
       registry,
       notifyDocumentFontConfigChanged,
+      invalidateCachesForConfigRegistration,
       onDocumentFontConfigApplied,
       flushMicrotasks,
     } = makeController();
@@ -125,6 +142,18 @@ describe('DocumentFontController', () => {
     expect(registry.registered).toHaveLength(1);
     expect(onDocumentFontConfigApplied).not.toHaveBeenCalled();
     expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
+    // The registered family changes availability without moving the signature, so the first measure
+    // must not reuse a stale fallback width: clear the shared caches (no reflow/event).
+    expect(invalidateCachesForConfigRegistration).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies a mapping-only initial config without invalidating caches (the signature busts them)', () => {
+    const { controller, resolver, invalidateCachesForConfigRegistration } = makeController();
+
+    controller.applyInitialConfig({ map: { Georgia: 'Gelasio' } });
+
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
+    expect(invalidateCachesForConfigRegistration).not.toHaveBeenCalled();
   });
 
   it('reset cancels a pending runtime batch and clears mappings', () => {
