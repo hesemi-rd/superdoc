@@ -123,6 +123,8 @@ export class FontReadinessGate {
 
   /** Resolved once a real font set is available: the watched set + its registry, paired. */
   #context: { fontSet: FontFaceSet | null; registry: FontRegistry } | null = null;
+  /** The registry instance the bundled pack was installed into, so it installs once per registry. */
+  #packInstalledFor: FontRegistry | null = null;
 
   #fontConfigVersion = 0;
   #requiredSignature = '';
@@ -401,9 +403,16 @@ export class FontReadinessGate {
         (env?.FontFaceCtor ?? null) as unknown as FontFaceCtorArg,
       );
     this.#context = { fontSet, registry };
-    // Let the editor install the bundled substitute pack into the registry once a real
-    // font set exists. Kept out of the gate so the gate never imports the font assets.
-    if (fontSet && this.#onRegistryResolved) {
+    // Install the bundled substitute pack into the registry whenever one is resolved - even WITHOUT a
+    // real font set. The pack registers face METADATA (family + weight + style), which is what
+    // `hasFace` reads to decide whether a substitute provides a face; LOADING still needs a font set,
+    // but face AVAILABILITY must not. Without this, an editor whose document has no `document.fonts`
+    // (SSR/jsdom, some iframe/embedded timings) sees `hasFace` false for every bundled face, so even
+    // Calibri Regular stops resolving to Carlito. Guarded per registry instance so it installs once
+    // (the domless registry is a singleton; a real font set's registry is cached). Kept out of the
+    // gate's imports - the editor injects the installer so the gate never imports the font assets.
+    if (this.#onRegistryResolved && registry !== this.#packInstalledFor) {
+      this.#packInstalledFor = registry;
       try {
         this.#onRegistryResolved(registry);
       } catch {
