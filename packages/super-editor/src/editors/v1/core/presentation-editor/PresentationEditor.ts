@@ -192,6 +192,7 @@ import type {
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
@@ -502,6 +503,7 @@ export class PresentationEditor extends EventEmitter {
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
+  #configuredDocumentBackground: DocumentBackground | undefined;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
@@ -702,6 +704,9 @@ export class PresentationEditor extends EventEmitter {
 
     const requestedFlowMode = options.layoutEngineOptions?.flowMode === 'semantic' ? 'semantic' : 'paginated';
     const requestedLayoutMode = options.layoutEngineOptions?.layoutMode ?? 'vertical';
+    this.#configuredDocumentBackground = this.#coerceDocumentBackground(
+      options.layoutEngineOptions?.documentBackground,
+    );
     this.#layoutOptions = {
       pageSize: options.layoutEngineOptions?.pageSize ?? DEFAULT_PAGE_SIZE,
       margins: options.layoutEngineOptions?.margins ?? DEFAULT_MARGINS,
@@ -713,6 +718,7 @@ export class PresentationEditor extends EventEmitter {
             }
           : options.layoutEngineOptions?.virtualization,
       zoom: options.layoutEngineOptions?.zoom ?? 1,
+      ...(this.#configuredDocumentBackground ? { documentBackground: this.#configuredDocumentBackground } : {}),
       pageStyles: options.layoutEngineOptions?.pageStyles,
       debugLabel: options.layoutEngineOptions?.debugLabel,
       layoutMode: requestedFlowMode === 'semantic' ? 'vertical' : requestedLayoutMode,
@@ -7861,6 +7867,12 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
     const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+    const documentBackground = this.#resolveDocumentBackground();
+    if (documentBackground) {
+      this.#layoutOptions.documentBackground = documentBackground;
+    } else {
+      delete this.#layoutOptions.documentBackground;
+    }
 
     const resolvedMargins = {
       top: margins.top!,
@@ -7900,17 +7912,18 @@ export class PresentationEditor extends EventEmitter {
           marginBottom: semanticMargins.bottom,
         },
         sectionMetadata,
+        ...(documentBackground ? { documentBackground } : {}),
       };
     }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     const alternateHeaders = this.#resolveAlternateHeadersFlag();
-
     return {
       flowMode: 'paginated',
       pageSize,
       margins: resolvedMargins,
+      ...(documentBackground ? { documentBackground } : {}),
       ...(columns ? { columns } : {}),
       sectionMetadata,
       alternateHeaders,
@@ -7936,6 +7949,19 @@ export class PresentationEditor extends EventEmitter {
       if (byRId) for (const blocks of byRId.values()) out.push(...blocks);
     }
     return out;
+  }
+
+  #coerceDocumentBackground(candidate: unknown): DocumentBackground | undefined {
+    if (!candidate || typeof candidate !== 'object') return undefined;
+    const color = (candidate as { color?: unknown }).color;
+    return typeof color === 'string' && color.length > 0 ? { color } : undefined;
+  }
+
+  #resolveDocumentBackground(): DocumentBackground | undefined {
+    return (
+      this.#coerceDocumentBackground(this.#editor?.state?.doc?.attrs?.documentBackground) ??
+      (this.#configuredDocumentBackground ? { ...this.#configuredDocumentBackground } : undefined)
+    );
   }
 
   #buildHeaderFooterInput() {
