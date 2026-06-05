@@ -133,6 +133,8 @@ const createAppHarness = () => {
     reset: vi.fn(),
     setExceptionHandler: vi.fn(),
     activeZoom: 100,
+    zoomMode: 'manual',
+    viewportMetrics: null,
   };
 
   const commentsStore = {
@@ -2156,7 +2158,118 @@ describe('SuperDoc core', () => {
 
       instance.setZoom(200);
 
-      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200 });
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200, mode: 'manual' });
+    });
+
+    it('setZoom switches zoom mode to manual', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      superdocStore.zoomMode = 'fit-width';
+      instance.setZoom(125);
+
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
+    it('setZoomMode switches between manual and fit-width and rejects invalid values', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoomMode('fit-width');
+      expect(superdocStore.zoomMode).toBe('fit-width');
+
+      instance.setZoomMode('manual');
+      expect(superdocStore.zoomMode).toBe('manual');
+
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      instance.setZoomMode('fit-page');
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('getZoomState reports mode, value, fitZoom, and effective bounds', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 35, max: 150 } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'manual',
+        value: 100,
+        fitZoom: null,
+        min: 35,
+        max: 150,
+      });
+
+      superdocStore.zoomMode = 'fit-width';
+      superdocStore.activeZoom = 74;
+      superdocStore.viewportMetrics = { availableWidth: 600, documentWidth: 816, fitZoom: 74 };
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'fit-width',
+        value: 74,
+        fitZoom: 74,
+        min: 35,
+        max: 150,
+      });
+    });
+
+    it('getZoomState falls back to default bounds and reorders swapped min/max', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 150, max: 35 } },
+      });
+      await flushMicrotasks();
+
+      const state = instance.getZoomState();
+      expect(state.min).toBe(35);
+      expect(state.max).toBe(150);
+
+      const defaultsInstance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const defaults = defaultsInstance.getZoomState();
+      expect(defaults.min).toBe(10);
+      expect(defaults.max).toBe(100);
+    });
+
+    it('getViewportMetrics returns null before the first measurement, then the stored metrics', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.getViewportMetrics()).toBeNull();
+
+      const metrics = { availableWidth: 935, documentWidth: 816, fitZoom: 115 };
+      superdocStore.viewportMetrics = metrics;
+
+      expect(instance.getViewportMetrics()).toEqual(metrics);
     });
 
     it('getZoom reflects value set by setZoom', async () => {

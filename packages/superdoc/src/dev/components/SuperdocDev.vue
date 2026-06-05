@@ -924,16 +924,10 @@ const init = async () => {
     currentZoom.value = zoom;
   });
 
-  superdoc.value?.on('layout-change', ({ fitZoom }) => {
-    // Clamp zoom between your min/max bounds
-    console.log('[layout-change]', fitZoom);
-    if (fitZoom < 50) {
-      superdoc.value.setZoom(50);
-    } else if (fitZoom > 200) {
-      superdoc.value.setZoom(200);
-    } else {
-      superdoc.value.setZoom(fitZoom);
-    }
+  superdoc.value?.on('viewport-change', ({ availableWidth, documentWidth, fitZoom }) => {
+    // Passive demo: custom consumers clamp and apply fitZoom themselves via
+    // setZoom(). For automatic behavior, configure `zoom: { mode: 'fit-width' }`.
+    console.log('[viewport-change]', { availableWidth, documentWidth, fitZoom });
   });
 
   window.superdoc = superdoc.value;

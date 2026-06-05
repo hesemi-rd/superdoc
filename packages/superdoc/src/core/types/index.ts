@@ -1539,16 +1539,115 @@ export type SuperDocExceptionPayload =
   | SuperDocExceptionEditorPayload;
 
 /**
- * Payload emitted when container dimensions change. Useful for implementing
- * fit-to-container zoom behavior.
+ * Zoom mode. `manual` holds whatever value was last set; `fit-width`
+ * continuously recomputes the zoom that fits the page width into the
+ * available container width. Calling `setZoom()` switches to
+ * `manual`; `setZoomMode('fit-width')` re-enters fitting.
  */
-export interface SuperDocLayoutChangePayload {
-  /** Current container width in pixels. */
-  containerWidth: number;
-  /** Measured document/page width in pixels. */
+export type SuperDocZoomMode = 'manual' | 'fit-width';
+
+/**
+ * Payload emitted with the `zoomChange` event and passed to
+ * `Config.onZoomChange`. Fires for every zoom source: `setZoom()`,
+ * the toolbar zoom control, and fit-width adjustments.
+ */
+export interface SuperDocZoomPayload {
+  /** The zoom level as a percentage (e.g. 100, 150). */
+  zoom: number;
+  /** The zoom mode that produced this value. */
+  mode: SuperDocZoomMode;
+}
+
+/**
+ * Payload emitted with the `viewport-change` event and passed to
+ * `Config.onViewportChange`. Fires when the width available to the
+ * document or the document's base page width changes. These are pure
+ * measurements: `zoom.fitWidth` policy options (`min`, `max`,
+ * `padding`) do not affect them. Useful for implementing custom
+ * fit behavior; for the common case, prefer `zoom.mode: 'fit-width'`,
+ * which applies a clamped fit automatically.
+ */
+export interface SuperDocViewportChangePayload {
+  /**
+   * Width available to the document in pixels: the measured container
+   * width minus the comments sidebar when it is visible.
+   */
+  availableWidth: number;
+  /** Document base page width in pixels at 100% zoom (zoom-independent). */
   documentWidth: number;
-  /** Calculated zoom to fit document in available width (unclamped). User should clamp to their preferred min/max. */
+  /** Zoom percentage that fits the document in the available width (unclamped, padding-free). Clamp before applying. */
   fitZoom: number;
+}
+
+/**
+ * Latest viewport measurements, readable at any time via
+ * `superdoc.getViewportMetrics()`. Same shape as the
+ * `viewport-change` payload; `null` until the first measurement
+ * (editors still mounting).
+ */
+export type SuperDocViewportMetrics = SuperDocViewportChangePayload;
+
+/**
+ * Options for the `fit-width` zoom mode. `min`/`max` clamp the
+ * applied zoom percentage; `padding` reserves horizontal space
+ * inside the available width before computing the applied fit.
+ * These shape the applied policy only, never the reported metrics.
+ */
+export interface SuperDocFitWidthOptions {
+  /** Lower bound for the applied zoom percentage (default: 10). */
+  min?: number;
+  /**
+   * Upper bound for the applied zoom percentage (default: 100, so
+   * fitting never enlarges the document past its natural size; raise
+   * it to let wide containers scale the page up).
+   */
+  max?: number;
+  /** Horizontal padding in pixels reserved inside the available width before computing the fit (default: 0). */
+  padding?: number;
+}
+
+/**
+ * Snapshot of the current zoom state, readable via
+ * `superdoc.getZoomState()`.
+ */
+export interface SuperDocZoomState {
+  /** Current zoom mode. */
+  mode: SuperDocZoomMode;
+  /** Current zoom value as a percentage. */
+  value: number;
+  /** Latest computed fit zoom (unclamped), or `null` before the first viewport measurement. */
+  fitZoom: number | null;
+  /** Effective lower bound the fit policy applies (config or default). */
+  min: number;
+  /** Effective upper bound the fit policy applies (config or default). */
+  max: number;
+}
+
+/**
+ * Options for `Config.zoom`: the initial zoom level, the starting
+ * mode, and the fit-width policy bounds. Runtime control stays on
+ * the instance: `setZoom()` (switches to manual), `setZoomMode()`,
+ * `getZoomState()`, `getViewportMetrics()`, and the `zoomChange` /
+ * `viewport-change` events.
+ */
+export interface SuperDocZoomConfig {
+  /**
+   * Initial zoom level as a percentage (default: 100). Applied before
+   * the first paint, so the document renders directly at this zoom
+   * with no visible jump. In `fit-width` mode this is the paint zoom
+   * until the first fit computes. Invalid values (non-finite or <= 0)
+   * are ignored with a console warning.
+   */
+  initial?: number;
+  /**
+   * Starting zoom mode (default: `'manual'`). In `'fit-width'` the
+   * document continuously re-fits to the available container width;
+   * the fit is applied through the normal zoom pipeline, so
+   * `zoomChange` fires for every adjustment.
+   */
+  mode?: SuperDocZoomMode;
+  /** Bounds and padding for the `fit-width` policy. */
+  fitWidth?: SuperDocFitWidthOptions;
 }
 
 export interface Config {
@@ -1685,6 +1784,19 @@ export interface Config {
   onPaginationUpdate?: (params: { totalPages: number; superdoc: SuperDoc }) => void;
   /** Callback when the list definitions change. */
   onListDefinitionsChange?: (params: ListDefinitionsPayload) => void;
+  /**
+   * Callback when the zoom level changes. Fires for every zoom source:
+   * `setZoom()`, the toolbar zoom control, and fit-to-container
+   * adjustments.
+   */
+  onZoomChange?: (params: SuperDocZoomPayload) => void;
+  /**
+   * Callback when the width available to the document or the
+   * document's base page width changes. Registered before the first
+   * emit, so the initial viewport measurement is never missed (unlike
+   * subscribing inside `onReady`).
+   */
+  onViewportChange?: (params: SuperDocViewportChangePayload) => void;
   /** The format of the document (docx, pdf, html). */
   format?: string;
   /** The extensions to load for the editor. */
@@ -1758,6 +1870,11 @@ export interface Config {
    * path in that case.
    */
   useLayoutEngine?: boolean;
+  /**
+   * Zoom behavior: the initial zoom level and the optional automatic
+   * fit-to-container policy. See `SuperDocZoomConfig`.
+   */
+  zoom?: SuperDocZoomConfig;
   /**
    * Callback fired after the editor reports `fonts-resolved`. The payload
    * contains `documentFonts` and `unsupportedFonts` arrays so hosts can fall

@@ -49,6 +49,7 @@ import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
 import { useCommentSmallScreen } from './composables/use-comment-small-screen.js';
 import { useCompactCommentPopover } from './composables/use-compact-comment-popover.js';
+import { useViewportFit } from './composables/use-viewport-fit.js';
 import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
@@ -57,7 +58,6 @@ import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracke
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 import {
   DEFAULT_COMMENTS_DISPLAY_MODE,
-  DEFAULT_DOCUMENT_VISIBLE_MIN_WIDTH_PX,
   RIGHT_CLICK_COMMENT_SUPPRESS_MS,
   VALID_COMMENTS_DISPLAY_MODES,
 } from './helpers/comment-small-screen.js';
@@ -78,6 +78,8 @@ const {
   selectionPosition,
   activeSelection,
   activeZoom,
+  zoomMode,
+  viewportMetrics,
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
 
@@ -1322,40 +1324,17 @@ watch(showCommentsSidebar, (value) => {
   proxy.$superdoc.broadcastSidebarToggle(value);
 });
 
-// Emit layout-change event when container width changes.
-// Capture base document width after layout resolves to avoid stale measurements.
-let baseDocumentWidth = null;
-let lastEmittedFitZoom = null;
-
-const emitLayoutChange = () => {
-  const containerWidth = superdocContainerWidth.value;
-  if (!proxy.$superdoc || containerWidth <= 0) return;
-
-  // Wait for document layout to resolve before capturing base width
-  if (baseDocumentWidth === null) {
-    if (!isReady.value) return;
-    const docEl = superdocRoot.value?.querySelector('.superdoc__document');
-    const measured = docEl?.clientWidth || docEl?.getBoundingClientRect?.().width || 0;
-    baseDocumentWidth = measured > 0 ? measured : DEFAULT_DOCUMENT_VISIBLE_MIN_WIDTH_PX;
-  }
-
-  const rawFitZoom = (containerWidth / baseDocumentWidth) * 100;
-  const fitZoom = Math.round(rawFitZoom);
-
-  // Only emit if fitZoom changed
-  if (fitZoom === lastEmittedFitZoom) return;
-  lastEmittedFitZoom = fitZoom;
-
-  proxy.$superdoc.emit('layout-change', {
-    containerWidth,
-    documentWidth: baseDocumentWidth,
-    fitZoom,
-  });
-};
-
-watch(superdocContainerWidth, emitLayoutChange);
-watch(isReady, (ready) => {
-  if (ready) emitLayoutChange();
+// Viewport fit tracking: maintains viewport metrics, emits `viewport-change`,
+// and applies the fit-width zoom policy. See composables/use-viewport-fit.js.
+useViewportFit({
+  getSuperdoc: () => proxy.$superdoc,
+  superdocContainerWidth,
+  isReady,
+  activeZoom,
+  zoomMode,
+  viewportMetrics,
+  showCommentsSidebar,
+  superdocRoot,
 });
 
 /**

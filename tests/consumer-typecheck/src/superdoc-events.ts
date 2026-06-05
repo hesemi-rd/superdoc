@@ -59,9 +59,21 @@ superdoc.on('sidebar-toggle', (isOpened) => {
   void flag;
 });
 
-superdoc.on('zoomChange', ({ zoom }) => {
+superdoc.on('zoomChange', ({ zoom, mode }) => {
   const value: number = zoom;
+  // `mode` narrows to the closed manual/fit-width union.
+  const zoomMode: 'manual' | 'fit-width' = mode;
   void value;
+  void zoomMode;
+});
+
+superdoc.on('viewport-change', ({ availableWidth, documentWidth, fitZoom }) => {
+  const available: number = availableWidth;
+  const docWidth: number = documentWidth;
+  const fit: number = fitZoom;
+  void available;
+  void docWidth;
+  void fit;
 });
 
 superdoc.on('formatting-marks-change', ({ showFormattingMarks, superdoc: instance }) => {
