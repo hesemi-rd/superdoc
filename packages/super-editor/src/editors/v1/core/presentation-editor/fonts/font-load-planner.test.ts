@@ -180,7 +180,10 @@ describe('planFontFaces (face-aware single plan)', () => {
 
   it('four-face clone: all faces resolve to the substitute (requiredFaces unchanged vs family-level)', () => {
     const resolver = createFontResolver();
-    const allFaces = () => true;
+    // Only the bundled CLONE (Carlito) is registered - the normal substitute case. An all-true oracle
+    // would mark Calibri itself registered, so provider precedence would (correctly) resolve it to
+    // `registered_face` (Calibri) instead of the clone - which is a different scenario.
+    const cloneFaces = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase() === 'carlito';
     const blocks = [
       para('p', [
         text('Calibri'),
@@ -189,7 +192,7 @@ describe('planFontFaces (face-aware single plan)', () => {
         text('Calibri', { bold: true, italic: true }),
       ]),
     ];
-    expect(keyset(planFontFaces(blocks, resolver, allFaces).requiredFaces)).toEqual(
+    expect(keyset(planFontFaces(blocks, resolver, cloneFaces).requiredFaces)).toEqual(
       new Set(['Carlito|400|normal', 'Carlito|700|normal', 'Carlito|400|italic', 'Carlito|700|italic']),
     );
   });
