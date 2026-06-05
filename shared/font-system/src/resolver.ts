@@ -90,6 +90,11 @@ function normalizeFamilyKey(family: string): string {
     .toLowerCase();
 }
 
+/** Deterministically sort [key, value] pairs by key, for a stable, order-independent signature. */
+function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
+  return pairs.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 /** Split a CSS font-family value into trimmed, non-empty families (primary first). */
 function splitStack(cssFontFamily: string): string[] {
   return cssFontFamily
@@ -109,6 +114,16 @@ function splitStack(cssFontFamily: string): string[] {
 export class FontResolver {
   /** Normalized logical family -> physical family. Takes precedence over the bundled map. */
   readonly #overrides = new Map<string, string>();
+  /**
+   * Normalized logical family -> this document's UNIQUE physical render family for its embedded font
+   * (e.g. `calibri` -> `__superdoc_embedded_3__Calibri`). Document-owned render identity: the browser's
+   * FontFaceSet is shared per page, so two documents that both embed "Calibri" must render under
+   * distinct physical families or one document would paint with the other's (subset) bytes. Resolves
+   * to `registered_face` and beats a same-named customer `fonts.add` face; the logical name is kept for
+   * export/report. Set by the document font controller, which also registers the face under the same
+   * physical name; cleared on a document swap / teardown.
+   */
+  readonly #embedded = new Map<string, string>();
   #version = 0;
   /** Memoized {@link signature}; null = stale, recomputed on next read. Invalidated on every mutation. */
   #cachedSignature: string | null = null;
@@ -153,13 +168,40 @@ export class FontResolver {
   }
 
   /**
-   * Drop all runtime overrides, reverting to the bundled-only map. Call on a document swap
-   * (the same editor instance is reused, so the prior document's `fonts.map` must not leak
-   * into the next). Bumps {@link version} only if something was actually cleared.
+   * Bind a logical family to this document's UNIQUE physical render family for its embedded font, so
+   * the face-aware ladder resolves the logical family to that physical name with reason
+   * `registered_face`. The caller (the document font controller) must register the face under the same
+   * physical name. Render-only: export keeps the logical family. The physical name must be unique to
+   * this document so a shared FontFaceSet cannot cross-render another document's embedded bytes.
+   */
+  mapEmbedded(logicalFamily: string, physicalFamily: string): void {
+    const key = normalizeFamilyKey(logicalFamily);
+    const physical = physicalFamily?.trim();
+    if (!key || !physical) return;
+    if (this.#embedded.get(key) === physical) return;
+    this.#embedded.set(key, physical);
+    this.#version += 1;
+    this.#cachedSignature = null;
+  }
+
+  /** Drop all embedded-family bindings (a document swap / teardown releases this document's embedded
+   *  fonts). Bumps {@link version} only if something was cleared. */
+  clearEmbedded(): void {
+    if (this.#embedded.size === 0) return;
+    this.#embedded.clear();
+    this.#version += 1;
+    this.#cachedSignature = null;
+  }
+
+  /**
+   * Drop all runtime overrides AND embedded bindings, reverting to the bundled-only map. Call on a
+   * document swap (the same editor instance is reused, so the prior document's `fonts.map` and embedded
+   * fonts must not leak into the next). Bumps {@link version} only if something was actually cleared.
    */
   reset(): void {
-    if (this.#overrides.size === 0) return;
+    if (this.#overrides.size === 0 && this.#embedded.size === 0) return;
     this.#overrides.clear();
+    this.#embedded.clear();
     this.#version += 1;
     this.#cachedSignature = null;
   }
@@ -179,14 +221,21 @@ export class FontResolver {
    */
   get signature(): string {
     if (this.#cachedSignature !== null) return this.#cachedSignature;
-    // JSON of sorted [logical, physical] pairs: deterministic and collision-safe even when a
-    // font name contains punctuation (a delimited "logical=physical|..." form would not be).
-    // Empty (no overrides) is '' so all default documents share cache. Memoized until the next
-    // mutation (map/unmap/reset clear the cache), since signature is read several times per render.
-    this.#cachedSignature =
-      this.#overrides.size === 0
-        ? ''
-        : JSON.stringify([...this.#overrides.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    // JSON of sorted [logical, physical] pairs: deterministic and collision-safe even when a font name
+    // contains punctuation (a delimited "logical=physical|..." form would not be). Empty (no overrides
+    // AND no embedded bindings) is '' so all default documents share cache. Embedded physical names are
+    // document-unique, so folding them in gives two embedded-Calibri documents distinct signatures
+    // (cache isolation). Format is unchanged when there are no embedded fonts (the common case keeps its
+    // existing identity). Memoized until the next mutation.
+    if (this.#overrides.size === 0 && this.#embedded.size === 0) {
+      this.#cachedSignature = '';
+    } else {
+      const overridePairs = sortPairs([...this.#overrides.entries()]);
+      this.#cachedSignature =
+        this.#embedded.size === 0
+          ? JSON.stringify(overridePairs)
+          : JSON.stringify({ o: overridePairs, e: sortPairs([...this.#embedded.entries()]) });
+    }
     return this.#cachedSignature;
   }
 
@@ -204,12 +253,14 @@ export class FontResolver {
    * The provider-precedence ladder for a bare PRIMARY family + face, consulting `hasFace` (the
    * registry's registered-face oracle):
    *   1. explicit `fonts.map` override  -> custom_mapping  (if the override provides the face)
-   *   2. a registered real face for the logical family itself (customer `fonts.add` / embedded)
-   *      -> registered_face  (so SuperDoc renders the real family instead of the bundled clone)
+   *   2a. this document's embedded face, under its UNIQUE physical family -> registered_face
+   *       (so a shared FontFaceSet renders THIS document's bytes, not another document's same-named font)
+   *   2b. a registered real face for the logical family itself (customer `fonts.add`) -> registered_face
    *   3. bundled metric-compatible substitute -> bundled_substitute  (if it provides the face)
    *   4. otherwise as_requested (no provider) - or fallback_face_absent when an override/substitute
    *      WAS known but lacked the face, so a single-face clone is never faux-styled.
-   * `physical === primary` (no swap) for registered_face / as_requested / fallback_face_absent.
+   * `physical === primary` (no swap) for 2b / as_requested / fallback_face_absent; an embedded face (2a)
+   * swaps to its unique physical family.
    */
   #resolveFaceLadder(
     primary: string,
@@ -225,7 +276,15 @@ export class FontResolver {
     if (override && hasFace(override, face.weight, face.style)) {
       return { physical: override, reason: 'custom_mapping' };
     }
-    // 2. a registered real face for the logical family itself (customer `fonts.add` / embedded).
+    // 2a. this document's embedded face, under its document-unique physical family. Checked before the
+    //     bare logical name so a document always renders its OWN embedded bytes, never another
+    //     document's same-named (subset) font sharing the page's FontFaceSet. Gated on hasFace so a
+    //     face the document does not embed (e.g. italic) falls through to the bundled substitute.
+    const embedded = this.#embedded.get(key);
+    if (embedded && hasFace(embedded, face.weight, face.style)) {
+      return { physical: embedded, reason: 'registered_face' };
+    }
+    // 2b. a registered real face for the logical family itself (customer `fonts.add`).
     if (hasFace(primary, face.weight, face.style)) {
       return { physical: primary, reason: 'registered_face' };
     }
@@ -295,10 +354,12 @@ export class FontResolver {
     const parts = splitStack(cssFontFamily);
     if (parts.length === 0) return cssFontFamily;
     const { physical, reason } = this.#resolveFaceLadder(parts[0], face, hasFace);
-    // Swap the primary to the physical ONLY when a substitute/override actually applies. For
-    // registered_face / as_requested / fallback_face_absent the physical IS the logical family, so
-    // keep the original stack (the registered real face or the browser fallback renders it).
-    if (reason === 'custom_mapping' || reason === 'bundled_substitute') {
+    // Swap the primary to the physical when a provider applies. For an embedded face, `registered_face`
+    // carries a document-unique physical family that MUST reach paint (else the shared FontFaceSet
+    // renders the wrong document's same-named font); for a `fonts.add` registered_face the physical
+    // equals the primary, so the swap is a harmless no-op. as_requested / fallback_face_absent keep the
+    // original stack (the physical IS the logical family; browser/system fallback renders it).
+    if (reason === 'custom_mapping' || reason === 'bundled_substitute' || reason === 'registered_face') {
       return [physical, ...parts.slice(1)].join(', ');
     }
     return cssFontFamily;

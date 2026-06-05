@@ -343,14 +343,20 @@ describe('DocumentFontController', () => {
       ...over,
     });
 
-    it('registers embeddable faces, skips restricted, and invalidates caches without a reflow/event', () => {
+    const hasFaceOf = (registry: FakeRegistry) => (f: string, w: '400' | '700', s: 'normal' | 'italic') =>
+      registry.hasFace(f, w, s);
+    const regular = { weight: '400', style: 'normal' } as const;
+
+    it('registers embeddable faces under a unique physical family, skips restricted, invalidates without reflow/event', () => {
       const {
         controller,
+        resolver,
         registry,
         invalidateCachesForConfigRegistration,
         notifyDocumentFontConfigChanged,
         onDocumentFontConfigApplied,
       } = makeController();
+      const hasFace = hasFaceOf(registry);
 
       controller.applyEmbeddedFaces([
         embed({ family: 'Calibri', weight: '400' }),
@@ -359,22 +365,26 @@ describe('DocumentFontController', () => {
         embed({ family: 'SecretFont', fsType: 0x0002, embeddable: false, relationshipId: 'rId3' }),
       ]);
 
+      // Both Calibri faces register under ONE document-unique physical family - never the shared
+      // logical name "Calibri" (which would let another document render these bytes).
+      const phys = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+      expect(phys).toMatch(/^__superdoc_embedded_\d+__\d+_Calibri$/);
       expect(registry.ownedRegistered).toEqual([
-        { family: 'Calibri', weight: '400', style: 'normal' },
-        { family: 'Calibri', weight: '700', style: 'normal' },
+        { family: phys, weight: '400', style: 'normal' },
+        { family: phys, weight: '700', style: 'normal' },
       ]);
+      expect(registry.hasFace(phys, '700', 'normal')).toBe(true);
+      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false); // logical name NOT in the shared set
       expect(registry.hasFace('SecretFont', '400', 'normal')).toBe(false); // restricted never registered
-      // Config-time registration: clears the shared measure caches, but no reflow/event (first measure
-      // has not happened yet).
+      // Config-time registration: clears the shared measure caches, but no reflow/event.
       expect(invalidateCachesForConfigRegistration).toHaveBeenCalledTimes(1);
       expect(onDocumentFontConfigApplied).not.toHaveBeenCalled();
       expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
     });
 
-    it('makes the resolver render the embedded real family via registered_face (not the bundled clone)', () => {
+    it('resolves the logical family to the unique physical via registered_face, and paint swaps to it', () => {
       const { controller, resolver, registry } = makeController();
-      const hasFace = (f: string, w: '400' | '700', s: 'normal' | 'italic') => registry.hasFace(f, w, s);
-      const regular = { weight: '400', style: 'normal' } as const;
+      const hasFace = hasFaceOf(registry);
 
       // Before: Calibri falls back to the bundled substitute (Carlito).
       expect(resolver.resolveFace('Calibri', regular, hasFace).physicalFamily).toBe('Carlito');
@@ -382,69 +392,93 @@ describe('DocumentFontController', () => {
       controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
 
       const resolved = resolver.resolveFace('Calibri', regular, hasFace);
-      expect(resolved.physicalFamily).toBe('Calibri'); // the document's real embedded font
       expect(resolved.reason).toBe('registered_face');
+      expect(resolved.physicalFamily).not.toBe('Calibri'); // NOT the shared logical name
+      expect(resolved.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_Calibri$/);
+      // The paint/measure seam swaps the primary to the unique physical family (fallbacks preserved).
+      expect(resolver.resolvePhysicalFamilyForFace('Calibri, serif', regular, hasFace)).toBe(
+        `${resolved.physicalFamily}, serif`,
+      );
     });
 
-    it('releases every embedded face on reset (document swap)', () => {
-      const { controller, registry } = makeController();
+    it('releases embedded faces and resolver bindings on reset (document swap)', () => {
+      const { controller, resolver, registry } = makeController();
+      const hasFace = hasFaceOf(registry);
       controller.applyEmbeddedFaces([
         embed({ family: 'Calibri', weight: '400' }),
         embed({ family: 'Calibri', weight: '700' }),
       ]);
-      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(true);
+      const phys = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+      expect(registry.hasFace(phys, '400', 'normal')).toBe(true);
 
       controller.reset();
 
       expect(registry.ownedReleased).toEqual([
-        { family: 'Calibri', weight: '400', style: 'normal' },
-        { family: 'Calibri', weight: '700', style: 'normal' },
+        { family: phys, weight: '400', style: 'normal' },
+        { family: phys, weight: '700', style: 'normal' },
       ]);
-      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false);
+      expect(registry.hasFace(phys, '400', 'normal')).toBe(false);
+      // Resolver reverts: Calibri falls back to the bundled substitute again.
+      expect(resolver.resolveFace('Calibri', regular, hasFace).physicalFamily).toBe('Carlito');
     });
 
-    it('releases every embedded face on dispose (teardown)', () => {
-      const { controller, registry } = makeController();
+    it('releases embedded faces and resolver bindings on dispose (teardown)', () => {
+      const { controller, resolver, registry } = makeController();
+      const hasFace = hasFaceOf(registry);
       controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
+      const phys = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
 
       controller.dispose();
 
-      expect(registry.ownedReleased).toEqual([{ family: 'Calibri', weight: '400', style: 'normal' }]);
-      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false);
+      expect(registry.ownedReleased).toEqual([{ family: phys, weight: '400', style: 'normal' }]);
+      expect(resolver.resolveFace('Calibri', regular, hasFace).physicalFamily).toBe('Carlito');
     });
 
-    it('replaces the prior embedded set on re-apply (releases old, registers new)', () => {
-      const { controller, registry } = makeController();
+    it('replaces the prior embedded set on re-apply (releases old, binds new)', () => {
+      const { controller, resolver, registry } = makeController();
+      const hasFace = hasFaceOf(registry);
       controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
+      const calibriPhys = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+
       controller.applyEmbeddedFaces([embed({ family: 'Cambria' })]);
 
-      expect(registry.ownedReleased).toEqual([{ family: 'Calibri', weight: '400', style: 'normal' }]);
-      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false);
-      expect(registry.hasFace('Cambria', '400', 'normal')).toBe(true);
+      expect(registry.ownedReleased).toEqual([{ family: calibriPhys, weight: '400', style: 'normal' }]);
+      expect(resolver.resolveFace('Calibri', regular, hasFace).physicalFamily).toBe('Carlito'); // released -> bundled
+      const cambria = resolver.resolveFace('Cambria', regular, hasFace);
+      expect(cambria.reason).toBe('registered_face');
+      expect(cambria.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_Cambria$/);
     });
 
     it('does nothing (no invalidate) when there are no embeddable faces', () => {
-      const { controller, registry, invalidateCachesForConfigRegistration } = makeController();
+      const { controller, resolver, registry, invalidateCachesForConfigRegistration } = makeController();
+      const hasFace = hasFaceOf(registry);
       controller.applyEmbeddedFaces([embed({ family: 'SecretFont', embeddable: false })]);
 
       expect(registry.ownedRegistered).toHaveLength(0);
       expect(invalidateCachesForConfigRegistration).not.toHaveBeenCalled();
+      expect(resolver.resolveFace('SecretFont', regular, hasFace).reason).toBe('as_requested');
     });
 
-    it("with a shared registry, one document's swap releases only its own embedded faces", () => {
-      // Two editors on ONE FontFaceSet (shared registry). This is exactly why release is handle-based:
-      // doc A's reset must not drop doc B's face.
+    it('gives each document a distinct physical family for the SAME logical name (render isolation)', () => {
+      // Two editors on ONE FontFaceSet, both embedding "Calibri" with different bytes. The unique
+      // physical families keep render ownership document-scoped: neither cleanup nor matching crosses.
       const registry = new FakeRegistry();
       const docA = makeController(registry);
       const docB = makeController(registry);
+      const hasFace = hasFaceOf(registry);
+
       docA.controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
-      docB.controller.applyEmbeddedFaces([embed({ family: 'Cambria' })]);
+      docB.controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]); // same logical family, other doc
+
+      const physA = docA.resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+      const physB = docB.resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+      expect(physA).not.toBe(physB); // distinct physical families for the same logical "Calibri"
 
       docA.controller.reset();
 
-      expect(registry.ownedReleased).toEqual([{ family: 'Calibri', weight: '400', style: 'normal' }]);
-      expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false); // doc A released
-      expect(registry.hasFace('Cambria', '400', 'normal')).toBe(true); // doc B intact
+      expect(registry.hasFace(physA, '400', 'normal')).toBe(false); // doc A released
+      expect(registry.hasFace(physB, '400', 'normal')).toBe(true); // doc B intact
+      expect(docB.resolver.resolveFace('Calibri', regular, hasFace).reason).toBe('registered_face');
     });
   });
 });
