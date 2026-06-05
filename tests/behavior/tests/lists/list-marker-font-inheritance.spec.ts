@@ -65,7 +65,12 @@ async function pickDropdownOption(
 }
 
 async function pickFontFamily(superdoc: SuperDocFixture, family: string): Promise<void> {
-  await pickDropdownOption(superdoc, '[data-item="btn-fontFamily-toggle"]', '[data-item="btn-fontFamily-option"]', family);
+  await pickDropdownOption(
+    superdoc,
+    '[data-item="btn-fontFamily-toggle"]',
+    '[data-item="btn-fontFamily-option"]',
+    family,
+  );
 }
 
 async function pickFontSize(superdoc: SuperDocFixture, size: string): Promise<void> {
