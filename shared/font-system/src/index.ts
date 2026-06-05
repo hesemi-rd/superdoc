@@ -56,6 +56,9 @@ export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_
 export type { FontResolutionRecord, UsedFace } from './report';
 export { buildFontReport, buildFaceReport } from './report';
 
+export type { EmbeddingPolicy } from './os2';
+export { parseEmbeddingPolicy } from './os2';
+
 export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions } from './registry';
 export {
   FontRegistry,
