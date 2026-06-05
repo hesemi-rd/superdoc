@@ -358,8 +358,21 @@ describe('DocumentFontController', () => {
       ...over,
     });
 
+    // The bundled substitute pack (Carlito, Caladea, Liberation Sans/Serif/Mono) is registered in
+    // production by installBundledSubstitutes, mirroring BUNDLED_MANIFEST. After #3653 the resolver only
+    // takes the bundled_substitute rung when the clone face is loadable (hasFace-gated), so a fake that
+    // omits the pack resolves e.g. Calibri to identity instead of Carlito. Report the clones as present -
+    // all are four-face, so they supply every weight/style - mirroring resolver.test.ts's clone-aware
+    // hasFace. Deliberately NOT pushed into registry.registered, which other tests assert on.
+    const BUNDLED_CLONE_FAMILIES = new Set([
+      'carlito',
+      'caladea',
+      'liberation sans',
+      'liberation serif',
+      'liberation mono',
+    ]);
     const hasFaceOf = (registry: FakeRegistry) => (f: string, w: '400' | '700', s: 'normal' | 'italic') =>
-      registry.hasFace(f, w, s);
+      registry.hasFace(f, w, s) || BUNDLED_CLONE_FAMILIES.has(f.trim().toLowerCase());
     const regular = { weight: '400', style: 'normal' } as const;
 
     it('registers embeddable faces under a unique physical family, skips restricted, invalidates without reflow/event', () => {
@@ -383,7 +396,7 @@ describe('DocumentFontController', () => {
       // Both Calibri faces register under ONE document-unique physical family - never the shared
       // logical name "Calibri" (which would let another document render these bytes).
       const phys = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
-      expect(phys).toMatch(/^__superdoc_embedded_\d+__\d+_Calibri$/);
+      expect(phys).toMatch(/^__superdoc_embedded_\d+__\d+_\d+_Calibri$/);
       expect(registry.ownedRegistered).toEqual([
         { family: phys, weight: '400', style: 'normal' },
         { family: phys, weight: '700', style: 'normal' },
@@ -409,7 +422,7 @@ describe('DocumentFontController', () => {
       const resolved = resolver.resolveFace('Calibri', regular, hasFace);
       expect(resolved.reason).toBe('registered_face');
       expect(resolved.physicalFamily).not.toBe('Calibri'); // NOT the shared logical name
-      expect(resolved.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_Calibri$/);
+      expect(resolved.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_\d+_Calibri$/);
       // The paint/measure seam swaps the primary to the unique physical family (fallbacks preserved).
       expect(resolver.resolvePhysicalFamilyForFace('Calibri, serif', regular, hasFace)).toBe(
         `${resolved.physicalFamily}, serif`,
@@ -461,7 +474,7 @@ describe('DocumentFontController', () => {
       expect(resolver.resolveFace('Calibri', regular, hasFace).physicalFamily).toBe('Carlito'); // released -> bundled
       const cambria = resolver.resolveFace('Cambria', regular, hasFace);
       expect(cambria.reason).toBe('registered_face');
-      expect(cambria.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_Cambria$/);
+      expect(cambria.physicalFamily).toMatch(/^__superdoc_embedded_\d+__\d+_\d+_Cambria$/);
     });
 
     it('does nothing (no invalidate) when there are no embeddable faces', () => {
@@ -494,6 +507,31 @@ describe('DocumentFontController', () => {
       expect(registry.hasFace(physA, '400', 'normal')).toBe(false); // doc A released
       expect(registry.hasFace(physB, '400', 'normal')).toBe(true); // doc B intact
       expect(docB.resolver.resolveFace('Calibri', regular, hasFace).reason).toBe('registered_face');
+    });
+
+    it('mints a fresh physical family across a same-controller document swap (no in-flight name reuse)', () => {
+      // One controller, two documents in sequence with reset() between (the real same-controller swap).
+      // The namespace is fixed per controller and reset() clears the per-family index, so WITHOUT a
+      // per-apply generation the second document would re-mint the first's physical name and alias its
+      // (possibly still in-flight) face on the shared registry. The generation keeps the names distinct.
+      const { controller, resolver, registry } = makeController();
+      const hasFace = hasFaceOf(registry);
+
+      controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
+      const physFirst = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+
+      controller.reset(); // document swap: releases the face, clears the index
+      controller.applyEmbeddedFaces([embed({ family: 'Calibri' })]);
+      const physSecond = resolver.resolveFace('Calibri', regular, hasFace).physicalFamily;
+
+      expect(physSecond).not.toBe(physFirst); // generation bumped: never a reused name
+      // Same controller -> same namespace; the GENERATION segment is what differs (not the namespace,
+      // unlike the cross-controller test above). Pin that so a regression to namespace-only uniqueness fails.
+      const namespaceOf = (phys: string) => phys.match(/^(__superdoc_embedded_\d+__)/)?.[1];
+      expect(namespaceOf(physSecond)).toBe(namespaceOf(physFirst));
+      // Only the second document's face is live in the shared registry; the first was released on swap.
+      expect(registry.hasFace(physFirst, '400', 'normal')).toBe(false);
+      expect(registry.hasFace(physSecond, '400', 'normal')).toBe(true);
     });
   });
 });

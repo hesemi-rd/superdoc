@@ -181,6 +181,27 @@ describe('SuperConverter.getEmbeddedFontFaces', () => {
     expect(new DataView(calibri.source).getUint32(0)).toBe(0x00010000);
   });
 
+  it('legacy @font-face injection honors the embedding policy (restricted + unreadable excluded)', () => {
+    const converter = makeConverter();
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-font');
+    try {
+      const legacy = converter.getFontFaceImportString();
+      // Embeddable fonts still get an @font-face.
+      expect(legacy.fontsImported).toEqual(expect.arrayContaining(['Calibri', 'Aptos']));
+      expect(legacy.styleString).toContain('Calibri');
+      // Restricted (fsType bit 1) and unreadable (null OS/2 policy) must NOT be injected - the same gate
+      // getEmbeddedFontFaces applies, so the legacy path can't leak restricted bytes under the family.
+      expect(legacy.fontsImported).not.toContain('SecretFont');
+      expect(legacy.fontsImported).not.toContain('CorruptFont');
+      expect(legacy.styleString).not.toContain('SecretFont');
+      expect(legacy.styleString).not.toContain('CorruptFont');
+    } finally {
+      if (originalCreateObjectURL) URL.createObjectURL = originalCreateObjectURL;
+      else delete URL.createObjectURL;
+    }
+  });
+
   it('returns [] when there is no font table or no embedded binaries', () => {
     const empty = new SuperConverter();
     expect(empty.getEmbeddedFontFaces()).toEqual([]);

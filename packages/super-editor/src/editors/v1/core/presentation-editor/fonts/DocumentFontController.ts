@@ -111,6 +111,13 @@ export class DocumentFontController {
    * one embedded family (e.g. Calibri regular + bold) onto a single physical family. Cleared on release.
    */
   readonly #embeddedPhysical = new Map<string, string>();
+  /**
+   * Per-apply generation, bumped on each {@link applyEmbeddedFaces} that registers a set. Folded into
+   * the physical family name: a document swap clears {@link #embeddedPhysical} (resetting the index), so
+   * without the generation the next document's first embedded family would re-mint the previous one's
+   * physical name and collide on the shared registry's in-flight load/status key.
+   */
+  #embeddedGeneration = 0;
 
   constructor(deps: DocumentFontControllerDeps) {
     this.#resolver = deps.resolver;
@@ -176,7 +183,7 @@ export class DocumentFontController {
   /**
    * Register the document's embedded fonts (from `SuperConverter.getEmbeddedFontFaces`) as first-class
    * registry faces, BEFORE the first layout measure. Each {@link EmbeddedFontFace.embeddable} face is
-   * registered under a DOCUMENT-UNIQUE physical family (e.g. `__superdoc_embedded_3__0_Calibri`), and the
+   * registered under a DOCUMENT-UNIQUE physical family (e.g. `__superdoc_embedded_3__1_0_Calibri`), and the
    * logical family is bound to it in this document's resolver, so the `registered_face` rung renders the
    * document's real font instead of the bundled substitute (Carlito) - with no resolver special-casing.
    * The FontFaceSet is shared per page, so registering under the logical name would let another document
@@ -200,6 +207,9 @@ export class DocumentFontController {
     // here - unlike the user-invoked `fonts.add`, this runs automatically on every document load.
     const registry = this.#getGate()?.resolveRegistry();
     if (!registry) return;
+    // New generation per registering apply, so this document's physical families never reuse the prior
+    // document's names (which would alias the shared registry's in-flight load/status on a swap).
+    this.#embeddedGeneration += 1;
     let registered = false;
     for (const face of faces) {
       if (!face?.embeddable) continue;
@@ -222,12 +232,13 @@ export class DocumentFontController {
   }
 
   /** This document's unique physical family for a logical embedded family, assigned once per family
-   *  (its faces share it). The per-family index guarantees uniqueness even if two names sanitize alike. */
+   *  (its faces share it). The per-apply generation + per-family index keep it unique across BOTH a
+   *  document swap (generation) and names that sanitize alike within one document (index). */
   #physicalFamilyFor(logicalFamily: string): string {
     const key = logicalFamily.trim().toLowerCase();
     let physical = this.#embeddedPhysical.get(key);
     if (!physical) {
-      physical = `${this.#embeddedNamespace}${this.#embeddedPhysical.size}_${sanitizeFamilyToken(logicalFamily)}`;
+      physical = `${this.#embeddedNamespace}${this.#embeddedGeneration}_${this.#embeddedPhysical.size}_${sanitizeFamilyToken(logicalFamily)}`;
       this.#embeddedPhysical.set(key, physical);
     }
     return physical;

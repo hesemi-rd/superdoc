@@ -1008,10 +1008,13 @@ class SuperConverter {
     let styleString = '';
     for (const font of fontsToInclude) {
       const filePath = elements.find((el) => el.attributes.Id === font.attributes['r:id'])?.attributes?.Target;
-      if (!filePath) return;
+      // Skip a font with a missing relationship/binary/deobfuscation rather than aborting the whole
+      // method (one malformed embedded font must not drop every other font's @font-face). Matches the
+      // registry path (getEmbeddedFontFaces), which already `continue`s past the same cases.
+      if (!filePath) continue;
 
       const fontUint8Array = this.fonts[`word/${filePath}`];
-      if (!fontUint8Array?.buffer) return;
+      if (!fontUint8Array?.buffer) continue;
       // Copy the EXACT view bytes into a fresh buffer BEFORE deobfuscating. deobfuscateFont XORs its
       // input IN PLACE; passing `this.fonts[...].buffer` would mutate the shared embedded-font bytes,
       // so the later registry extraction (getEmbeddedFontFaces) would double-XOR and corrupt the face.
@@ -1023,7 +1026,15 @@ class SuperConverter {
       );
 
       const ttfBuffer = deobfuscateFont(fontBuffer, font.attributes['w:fontKey']);
-      if (!ttfBuffer) return;
+      if (!ttfBuffer) continue;
+
+      // Honor the embedding policy here too. The registry path (getEmbeddedFontFaces) skips a face whose
+      // OS/2 fsType forbids embedding (or is unreadable), but this legacy @font-face injection would
+      // otherwise still emit the restricted bytes under the logical family. Reuse the SAME rule
+      // (parseEmbeddingPolicy; a null/unreadable policy is conservatively not embeddable) so the policy
+      // gate has one source of truth; skip just this face rather than aborting the rest.
+      const policy = parseEmbeddingPolicy(ttfBuffer);
+      if (!(policy ? policy.embeddable : false)) continue;
 
       // Convert to a blob and inject @font-face
       const blob = new Blob([ttfBuffer], { type: 'font/ttf' });
