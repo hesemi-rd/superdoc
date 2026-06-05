@@ -4,6 +4,7 @@ import {
   resolveFitWidthOptions,
   computeFitZoom,
   computeAppliedFitZoom,
+  normalizePdfPageMeasurement,
 } from './use-viewport-fit.js';
 
 // Full wiring (watchers, metric storage, emit dedup, mode-driven fit
@@ -87,5 +88,30 @@ describe('computeAppliedFitZoom', () => {
 
   it('returns null when padding consumes the available width', () => {
     expect(computeAppliedFitZoom(90, 816, { ...options, padding: 96 })).toBeNull();
+  });
+});
+
+describe('normalizePdfPageMeasurement', () => {
+  const PT_TO_PX = 96 / 72;
+
+  it('converts a rendered page back to CSS px at 100% zoom via the scale factor', () => {
+    // 612pt letter page at 100% zoom renders 816 CSS px (scale factor 4/3).
+    expect(normalizePdfPageMeasurement(816, PT_TO_PX, 1)).toBeCloseTo(816, 6);
+    // Same page at 50% zoom renders 408 px with scale factor 2/3.
+    expect(normalizePdfPageMeasurement(408, (2 / 3) * 1, 0.5)).toBeCloseTo(816, 6);
+    // Zoom-sync state is irrelevant when the scale factor is readable:
+    // a seeded zoom the viewer has not applied yet cannot corrupt the base.
+    expect(normalizePdfPageMeasurement(816, PT_TO_PX, 0.5)).toBeCloseTo(816, 6);
+  });
+
+  it('falls back to dividing out the assumed zoom without a scale factor', () => {
+    expect(normalizePdfPageMeasurement(408, NaN, 0.5)).toBeCloseTo(816, 6);
+    expect(normalizePdfPageMeasurement(816, 0, 1)).toBeCloseTo(816, 6);
+  });
+
+  it('returns null for unmeasurable pages', () => {
+    expect(normalizePdfPageMeasurement(0, PT_TO_PX, 1)).toBeNull();
+    expect(normalizePdfPageMeasurement(-5, PT_TO_PX, 1)).toBeNull();
+    expect(normalizePdfPageMeasurement(NaN, PT_TO_PX, 1)).toBeNull();
   });
 });

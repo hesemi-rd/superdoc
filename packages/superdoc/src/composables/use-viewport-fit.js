@@ -46,6 +46,23 @@ export const computeAppliedFitZoom = (availableWidth, documentWidth, options) =>
   return Math.round(Math.min(options.max, Math.max(options.min, padded)));
 };
 
+const PDF_POINTS_TO_CSS_PX = 96 / 72;
+
+// One measured PDF page width back to CSS px at 100% zoom. PDF pages size
+// via `calc(var(--scale-factor) * <pt>px)` where the scale factor is the
+// viewer zoom times the pt-to-CSS-px conversion (96/72), so dividing by the
+// page's actual scale factor yields PDF points regardless of zoom-sync
+// state, and multiplying by 96/72 converts back to CSS px at 100% zoom
+// (verified live: a 612pt letter page renders 816 CSS px at 100%). Without
+// a readable scale factor, fall back to dividing out the assumed zoom.
+export const normalizePdfPageMeasurement = (measured, scaleFactor, zoomFactor) => {
+  if (!(measured > 0)) return null;
+  if (Number.isFinite(scaleFactor) && scaleFactor > 0) {
+    return (measured / scaleFactor) * PDF_POINTS_TO_CSS_PX;
+  }
+  return zoomFactor > 0 ? measured / zoomFactor : measured;
+};
+
 /**
  * Viewport fit tracking. Maintains pure viewport metrics (available width,
  * document base width, fit zoom), stores them for `getViewportMetrics()`,
@@ -100,35 +117,21 @@ export function useViewportFit({
     return null;
   };
 
-  // Widest rendered PDF page in CSS px at 100% zoom. PDF pages size via
-  // `calc(var(--scale-factor) * <pt>px)` where the scale factor is the
-  // viewer zoom times the pt-to-CSS-px conversion (96/72). Dividing the
-  // measured width by the page's actual rendered scale factor yields PDF
-  // points regardless of zoom-sync state; multiplying by 96/72 converts
-  // back to the CSS width at 100% zoom (verified: a 612pt letter page
-  // renders 816 CSS px at 100%).
+  // Widest rendered PDF page in CSS px at 100% zoom. See
+  // `normalizePdfPageMeasurement` for the unit handling.
   const resolvePdfPageWidth = () => {
     const root = superdocRoot.value;
     if (!root?.querySelectorAll) return null;
-    const PDF_POINTS_TO_CSS_PX = 96 / 72;
     let widest = 0;
     for (const page of root.querySelectorAll(PDF_PAGE_SELECTOR)) {
       const measured = Number(page.clientWidth) || Number(page.getBoundingClientRect?.().width) || 0;
-      if (!(measured > 0)) continue;
       let scaleFactor = NaN;
       if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
         scaleFactor = Number.parseFloat(window.getComputedStyle(page).getPropertyValue('--scale-factor'));
       }
-      let normalized;
-      if (Number.isFinite(scaleFactor) && scaleFactor > 0) {
-        normalized = (measured / scaleFactor) * PDF_POINTS_TO_CSS_PX;
-      } else {
-        // No scale-factor var: assume the viewer is synced to the global
-        // zoom and divide that out instead.
-        const zoomFactor = (activeZoom.value ?? 100) / 100;
-        normalized = zoomFactor > 0 ? measured / zoomFactor : measured;
-      }
-      if (normalized > widest) widest = normalized;
+      const zoomFactor = (activeZoom.value ?? 100) / 100;
+      const normalized = normalizePdfPageMeasurement(measured, scaleFactor, zoomFactor);
+      if (normalized !== null && normalized > widest) widest = normalized;
     }
     return widest > 0 ? widest : null;
   };

@@ -3161,5 +3161,77 @@ describe('SuperDoc.vue', () => {
       expect(superdocStoreStub.activeZoom.value).toBe(74);
       expect(zoomChangeCalls(superdocStub)).toEqual([['zoomChange', { zoom: 74, mode: 'fit-width' }]]);
     });
+
+    it('resolves documentWidth as the widest page across documents', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      // Two DOCX documents: portrait letter (8.5in) and landscape (11in).
+      // Zoom is global, so the fit must target the widest page.
+      superdocStoreStub.documents.value = [
+        {
+          id: 'doc-portrait',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 8.5, height: 11 } }) })),
+          setEditor: vi.fn(),
+        },
+        {
+          id: 'doc-landscape',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 11, height: 8.5 } }) })),
+          setEditor: vi.fn(),
+        },
+      ];
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      // 11in * 96 = 1056: the widest page wins over 816.
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('resolves PDF page width scale-relatively (zoom-sync state cannot corrupt the base)', async () => {
+      const superdocStub = createSuperdocStub();
+      // No DOCX editor: the PDF page is the only measurable document.
+
+      const wrapper = await mountComponent(superdocStub);
+
+      // A rendered 612pt PDF page at 50% viewer zoom measures 408px with
+      // --scale-factor 2/3 (zoom * 96/72). The store zoom claims 100% (a
+      // seeded zoom the viewer has not applied yet); the resolver must
+      // trust the page's actual scale factor and report 816 regardless.
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      Object.defineProperty(pageEl, 'clientWidth', { configurable: true, value: 408 });
+      wrapper.find('.superdoc').element.appendChild(pageEl);
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const computedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+        if (el === pageEl) {
+          return { getPropertyValue: (prop) => (prop === '--scale-factor' ? `${2 / 3}` : '') };
+        }
+        return originalGetComputedStyle(el, pseudo);
+      });
+
+      try {
+        setContainerWidth(wrapper, 1200);
+        wrapper.vm.recalculateCompactCommentsMode();
+        superdocStoreStub.isReady.value = true;
+        await nextTick();
+
+        const calls = viewportChangeCalls(superdocStub);
+        expect(calls.length).toBe(1);
+        expect(calls[0][1].documentWidth).toBeCloseTo(816, 6);
+        expect(calls[0][1].fitZoom).toBe(147);
+      } finally {
+        computedStyleSpy.mockRestore();
+      }
+    });
   });
 });
