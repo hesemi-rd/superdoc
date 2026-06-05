@@ -80,8 +80,10 @@ const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = Object.freeze({
   arial: 'Liberation Sans',
   'times new roman': 'Liberation Serif',
   'courier new': 'Liberation Mono',
-  // Helvetica is metric-identical to the already-bundled Liberation Sans (0.000% advance delta, same
-  // 2048 upem, all four faces - Helvetica/Arial/Liberation share metrics). An alias only: no new asset.
+  // Helvetica -> the already-bundled Liberation Sans: same candidate and metric verdict as Arial
+  // above. docfonts records it `metric_safe` from one Apple/macOS Helvetica analytic-advance
+  // measurement (0.000% delta, all four faces; evidenceId "helvetica"). Resolver alias ONLY: no new
+  // asset, no new license; its layout gate is not_run and its ship gate fails until this alias lands.
   helvetica: 'Liberation Sans',
 });
 

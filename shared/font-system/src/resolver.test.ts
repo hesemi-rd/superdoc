@@ -50,9 +50,10 @@ describe('font resolver', () => {
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
   });
 
-  it('aliases Helvetica to the already-bundled Liberation Sans (metric-identical, no new asset)', () => {
-    // Helvetica/Arial/Liberation share metrics; Helvetica->Liberation Sans measures 0.000% advance
-    // delta, so it is a clean clone alias - same bucket as Arial, not a visual fallback.
+  it('aliases Helvetica to the already-bundled Liberation Sans (metric_safe alias, no new asset)', () => {
+    // docfonts records Helvetica -> Liberation Sans as metric_safe (0.000% analytic advance, all four
+    // faces; resolver-alias only, no layout proof). Resolves like a bundled substitute, not a visual
+    // fallback.
     expect(resolveFontFamily('Helvetica')).toEqual({
       logicalFamily: 'Helvetica',
       physicalFamily: 'Liberation Sans',
