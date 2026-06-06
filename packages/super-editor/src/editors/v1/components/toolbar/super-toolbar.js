@@ -8,12 +8,14 @@ import { vClickOutside } from '@superdoc/common';
 import Toolbar from './Toolbar.vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { toolbarTexts } from './toolbarTexts.js';
-import { composeToolbarFontOptions,
+import {
+  composeToolbarFontOptions,
   HEADLESS_TOOLBAR_COMMANDS,
   HEADLESS_ITEM_MAP,
   HEADLESS_EXECUTE_ITEMS,
   TABLE_ACTION_COMMAND_IDS,
-  TABLE_ACTION_COMMAND_MAP } from './constants.js';
+  TABLE_ACTION_COMMAND_MAP,
+} from './constants.js';
 import { getAvailableColorOptions, makeColorOption, renderColorOptions } from './color-dropdown-helpers.js';
 import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
@@ -540,6 +542,12 @@ export class SuperToolbar extends EventEmitter {
    * Rebuild the toolbar items (and so the font dropdown OPTIONS) from current config + document fonts.
    * `updateToolbarState()` only refreshes existing item state; this re-creates the items, which is what
    * surfaces a newly-resolved document font in the dropdown.
+   *
+   * `toolbarItems` / `overflowItems` are plain instance fields, not a Vue reactive source, so swapping them
+   * is invisible to the mounted `Toolbar.vue` until it re-renders. Emit `toolbar-items-changed` so the view
+   * forces that re-render (it bumps its render key). Without it the rebuilt items never reach the DOM and the
+   * toolbar keeps showing the previously-built set - e.g. the initial disabled items before an editor attaches.
+   * The resize path rebuilds and bumps the key from the view itself, so it does not go through this method.
    * @private
    * @returns {void}
    */
@@ -552,6 +560,7 @@ export class SuperToolbar extends EventEmitter {
       hideButtons: this.config.hideButtons,
       isDev: this.isDev,
     });
+    this.emit('toolbar-items-changed');
   }
 
   /**

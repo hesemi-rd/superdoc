@@ -91,4 +91,17 @@ describe('SuperToolbar font dropdown rebuild trigger', () => {
     editor.emit('fonts-changed'); // identical options -> no rebuild
     expect(makeDefaultItemsSpy.mock.calls.length).toBe(buildsAfterChange);
   });
+
+  it('emits toolbar-items-changed on rebuild (and not on the guarded no-op) so the view re-renders', () => {
+    // The rebuilt arrays are plain fields; Toolbar.vue only re-reads them on this event. Prove it fires.
+    const changed = vi.fn();
+    toolbar.on('toolbar-items-changed', changed);
+
+    documentOptions = [aptos];
+    editor.emit('fonts-changed'); // a real change -> one rebuild -> one notify
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    editor.emit('fonts-changed'); // identical options -> guard skips both the rebuild and the notify
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
 });
