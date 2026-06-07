@@ -6,7 +6,7 @@ import {
   fontOfferingStack,
   fontOfferingRenderStack,
 } from './font-offerings';
-import { BUNDLED_MANIFEST } from './bundled-manifest';
+import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
 const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman'];
 
@@ -16,15 +16,6 @@ const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Time
  * reach the toolbar as document-specific options, never as silent defaults.
  */
 const NOT_DEFAULT_YET = ['Aptos', 'Georgia', 'Cambria', 'Calibri Light', 'Baskerville', 'Arial Narrow'];
-
-/** Pin the generic classifier: every bundled family maps to exactly this generic (deliberate, tested). */
-const EXPECTED_GENERIC: Record<string, string> = {
-  Carlito: 'sans-serif',
-  Caladea: 'serif',
-  'Liberation Sans': 'sans-serif',
-  'Liberation Serif': 'serif',
-  'Liberation Mono': 'monospace',
-};
 
 describe('font offerings', () => {
   it('default offerings are exactly the metric-safe bundled fonts', () => {
@@ -61,16 +52,10 @@ describe('font offerings', () => {
     expect(fontOfferingRenderStack(calibri)).toBe('Carlito, sans-serif'); // physical: dropdown preview
   });
 
-  it('generic classifier is complete and correct for every bundled family (deliberate, pinned)', () => {
-    // Completeness: every bundled physical family has a pinned generic - a new clone cannot ship without one.
-    for (const family of BUNDLED_MANIFEST.map((f) => f.family)) {
-      expect(EXPECTED_GENERIC[family]).toBeDefined();
-    }
-    // Correctness: each offering's generic matches the pinned generic for its physical family.
+  it('uses the CSS generic category supplied by DocFonts evidence', () => {
+    const evidenceGeneric = new Map(SUBSTITUTION_EVIDENCE.map((row) => [row.logicalFamily, row.generic]));
     for (const o of FONT_OFFERINGS) {
-      if (o.physicalFamily && EXPECTED_GENERIC[o.physicalFamily]) {
-        expect(o.generic).toBe(EXPECTED_GENERIC[o.physicalFamily]);
-      }
+      expect(o.generic).toBe(evidenceGeneric.get(o.logicalFamily));
     }
   });
 });

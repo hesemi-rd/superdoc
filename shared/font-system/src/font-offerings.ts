@@ -14,11 +14,11 @@
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
  */
-import { SUBSTITUTION_EVIDENCE, type SubstituteVerdict } from './substitution-evidence';
+import { SUBSTITUTION_EVIDENCE, type CssGeneric, type SubstituteVerdict } from './substitution-evidence';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /** CSS generic family used to terminate an offering's fallback stack. */
-export type FontGeneric = 'sans-serif' | 'serif' | 'monospace';
+export type FontGeneric = CssGeneric;
 
 /** Which UI surface a logical font may appear on. A product decision, distinct from the verdict. */
 export type OfferingClass =
@@ -49,19 +49,6 @@ export interface FontOffering {
   evidenceId: string;
 }
 
-/**
- * CSS generic per bundled physical family. Neither docfonts evidence nor BUNDLED_MANIFEST carries a
- * generic category, so this is an explicit, deliberate classifier. `font-offerings.test.ts` asserts
- * every bundled family appears here, so a new bundled clone cannot silently ship without one.
- */
-const PHYSICAL_GENERIC: Readonly<Record<string, FontGeneric>> = Object.freeze({
-  Carlito: 'sans-serif', // Calibri
-  Caladea: 'serif', // Cambria
-  'Liberation Sans': 'sans-serif', // Arial, Helvetica
-  'Liberation Serif': 'serif', // Times New Roman
-  'Liberation Mono': 'monospace', // Courier New
-});
-
 const BUNDLED_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 
 /** Classify one evidence row by its policy action, verdict, and whether its target is bundled. */
@@ -85,10 +72,7 @@ function deriveOfferings(): readonly FontOffering[] {
     return {
       logicalFamily: row.logicalFamily,
       physicalFamily: row.physicalFamily,
-      // Generic is only load-bearing for offerings we actually surface (all bundled); a missing entry
-      // for a bundled family is a config error the test catches, so the `?? 'sans-serif'` is a guard,
-      // not a default we rely on.
-      generic: (row.physicalFamily && PHYSICAL_GENERIC[row.physicalFamily]) || 'sans-serif',
+      generic: row.generic,
       offering: classifyOffering(row.policyAction, row.verdict, row.physicalFamily, bundled),
       bundled,
       verdict: row.verdict,
