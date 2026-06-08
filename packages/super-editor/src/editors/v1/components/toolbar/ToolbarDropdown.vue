@@ -90,10 +90,19 @@ const updateMenuPosition = () => {
   const rect = triggerRef.value.getBoundingClientRect();
   const menuEl = menuRef.value;
   const menuWidth = menuEl?.offsetWidth ?? 0;
+  const menuHeight = menuEl?.scrollHeight ?? menuEl?.offsetHeight ?? 0;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;
-  const top = rect.bottom + 4;
+  const gap = 4;
+  const belowTop = rect.bottom + gap;
+  const aboveBottom = rect.top - gap;
+  const availableBelow = Math.max(0, viewportHeight - belowTop - gutter);
+  const availableAbove = Math.max(0, aboveBottom - gutter);
+  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow;
+  const maxHeight = openAbove ? availableAbove : availableBelow;
+  const menuRenderHeight = menuHeight ? Math.min(menuHeight, maxHeight) : maxHeight;
+  const top = openAbove ? Math.max(gutter, aboveBottom - menuRenderHeight) : belowTop;
   let left = rect.left;
 
   if (props.placement === 'bottom-end') {
@@ -107,7 +116,7 @@ const updateMenuPosition = () => {
   menuPosition.value = {
     top: `${top}px`,
     left: `${left}px`,
-    maxHeight: `${Math.max(120, viewportHeight - top - gutter)}px`,
+    maxHeight: `${maxHeight}px`,
   };
 };
 
@@ -181,6 +190,7 @@ const focusKeyboardIndex = () => {
   const target = optionRefs.value[keyboardIndex.value];
   if (target && typeof target.focus === 'function') {
     target.focus();
+    target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }
 };
 
@@ -347,6 +357,7 @@ watch(
     if (hasRenderOptions.value) return;
 
     keyboardIndex.value = getInitialKeyboardIndex();
+    await nextTick();
     focusKeyboardIndex();
   },
   { immediate: true },
