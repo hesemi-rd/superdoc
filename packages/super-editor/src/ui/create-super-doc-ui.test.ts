@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { getToolbarFontCatalog } from '@superdoc/font-system';
+
 import { createSuperDocUI } from './create-super-doc-ui.js';
 import { shallowEqual } from './equality.js';
 import type { SuperDocLike } from './types.js';
+
+/** Catalog labels ∪ extra document-only labels, deduped + alphabetical (matches buildFontFamilyOptions). */
+function expectedFontLabels(...documentOnly: string[]): string[] {
+  const catalog = getToolbarFontCatalog().map((entry) => entry.logicalFamily);
+  return [...new Set([...catalog, ...documentOnly])].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+}
 
 /**
  * Builds a minimal stub of the SuperDoc instance + its activeEditor
@@ -148,15 +156,8 @@ describe('createSuperDocUI', () => {
     teardown.push(() => ui.destroy());
 
     const options = ui.fonts.getOptions();
-    expect(options.map((option) => option.label)).toEqual([
-      'Aptos',
-      'Arial',
-      'Bangla MN',
-      'Calibri',
-      'Courier New',
-      'Helvetica',
-      'Times New Roman',
-    ]);
+    // Aptos and Calibri are in the catalog (deduped); Bangla MN is document-only and appended.
+    expect(options.map((option) => option.label)).toEqual(expectedFontLabels('Bangla MN'));
     expect(options.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',
       value: 'Aptos',
@@ -175,12 +176,13 @@ describe('createSuperDocUI', () => {
       observed.push(snapshot.options.map((option) => option.label));
     });
 
-    superdoc.setDocumentFontOptions([{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }]);
+    // Bangla MN is document-only (not in the catalog), so adding it grows the list and re-fires.
+    superdoc.setDocumentFontOptions([{ logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' }]);
     superdoc.fireSuperdoc('fonts-changed');
     await flushMicrotasks();
 
-    expect(observed.at(0)).toEqual(['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
-    expect(observed.at(-1)).toEqual(['Aptos', 'Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
+    expect(observed.at(0)).toEqual(expectedFontLabels());
+    expect(observed.at(-1)).toEqual(expectedFontLabels('Bangla MN'));
   });
 
   it('refreshes ui.fonts for delimiter-colliding font names', async () => {

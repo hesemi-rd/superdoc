@@ -7,7 +7,7 @@
  * plain picker rows; internal fallback/reporting details stay in SuperDoc's runtime font report.
  */
 import { buildFaceReport, type FontResolutionRecord, type UsedFace } from './report';
-import { getDefaultFontOfferings } from './font-offerings';
+import { getToolbarFontCatalog } from './font-catalog';
 import type { FontRegistry } from './registry';
 import type { FontResolver } from './resolver';
 
@@ -84,20 +84,23 @@ function compareByLabel(a: FontFamilyOption, b: FontFamilyOption): number {
 }
 
 /**
- * Compose the final font-family picker list from bundled defaults plus active document fonts. The result
- * is sorted alphabetically and deduped by logical family.
+ * Compose the final font-family picker list from the toolbar catalog plus active document fonts. The
+ * catalog (every DocFonts toolbar-selectable font, bundled or not) seeds the list; document-only fonts
+ * the catalog does not already carry are appended. The result is sorted alphabetically and deduped by
+ * normalized logical family. Shared by `ui.fonts` and `useSuperDocFontOptions` so custom UIs see the
+ * same composed options as the built-in toolbar.
  */
 export function buildFontFamilyOptions(documentOptions: ReadonlyArray<DocumentFontOption>): FontFamilyOption[] {
   const seen = new Set<string>();
   const options: FontFamilyOption[] = [];
-  for (const offering of getDefaultFontOfferings()) {
-    const key = normalizeKey(offering.logicalFamily);
+  for (const entry of getToolbarFontCatalog()) {
+    const key = normalizeKey(entry.logicalFamily);
     if (seen.has(key)) continue;
     seen.add(key);
     options.push({
-      label: offering.logicalFamily,
-      value: offering.logicalFamily,
-      previewFamily: offering.physicalFamily || offering.logicalFamily,
+      label: entry.logicalFamily,
+      value: entry.logicalFamily,
+      previewFamily: entry.previewFamily,
     });
   }
   for (const option of documentOptions) {
