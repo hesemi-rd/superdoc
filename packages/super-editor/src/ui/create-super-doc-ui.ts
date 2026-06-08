@@ -1768,33 +1768,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return receipt;
     },
     setActive(commentId) {
-      // Dispatch on the host editor: its `PresentationEditor` is what
-      // repaints comment highlights (it listens to the host editor's
-      // `commentsUpdate`), so the activation must originate there.
       const editor = resolveHostEditor(superdoc) as unknown as {
-        commands?: { setActiveComment?(input: { commentId: string | null }): boolean };
-        doc?: { comments?: { list?(): { items?: ReadonlyArray<{ id?: string; importedId?: string }> } } };
+        doc?: { comments?: { setActive?(input: { commentId: string | null }): Receipt } };
       } | null;
-      const setActiveComment = editor?.commands?.setActiveComment;
-      if (typeof setActiveComment !== 'function') return false;
 
-      if (commentId !== null) {
-        // Guard unknown ids. When an id is active the painter fades
-        // every *other* comment; an id that matches nothing would dim
-        // the whole document with no highlight shown. Accept only ids
-        // present in the current comment list — matching by `id` or the
-        // imported Word id, both of which the painter keys on.
-        const items = editor?.doc?.comments?.list?.().items ?? [];
-        const known = items.some((c) => c.id === commentId || c.importedId === commentId);
-        if (!known) return false;
+      try {
+        const comments = editor?.doc?.comments;
+        const setActive = comments?.setActive;
+        if (typeof setActive !== 'function') return false;
+
+        const receipt = setActive.call(comments, { commentId });
+        return receipt.success === true;
+      } catch {
+        return false;
       }
-
-      // Highlight-only. `setActiveComment` sets plugin meta the painter
-      // repaints from; it does not scroll, move the selection, or focus
-      // the editor (unlike `setCursorById`, which `scrollTo` uses).
-      // `activeIds` is selection-derived and intentionally left
-      // untouched, so no `refreshAndNotify()` here.
-      return setActiveComment({ commentId }) === true;
     },
     async scrollTo(commentId) {
       // `CommentAddress` is body-scoped in the contract — it has no

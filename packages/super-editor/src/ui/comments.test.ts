@@ -14,6 +14,7 @@ function makeStubs(
       id: string;
       commentId: string;
       importedId?: string;
+      parentCommentId?: string;
       text?: string;
       status?: 'open' | 'resolved';
     }>;
@@ -44,6 +45,7 @@ function makeStubs(
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: c.commentId },
       commentId: c.commentId,
       importedId: c.importedId,
+      parentCommentId: c.parentCommentId,
       status: c.status ?? ('open' as const),
       text: c.text,
     })),
@@ -52,6 +54,35 @@ function makeStubs(
   const navigateTo = vi.fn(async (_target: unknown) => true);
   const setActiveComment = vi.fn((_input: { commentId: string | null }) => true);
   const setCursorById = vi.fn((_id: string, _options?: unknown) => true);
+  const setActive = vi.fn((input: { commentId: string | null }) => {
+    if (input.commentId === null) {
+      return setActiveComment({ commentId: null })
+        ? { success: true as const, updated: undefined }
+        : { success: false as const, failure: { code: 'INVALID_TARGET', message: 'failed' } };
+    }
+
+    let item = commentsList.find(
+      (c) => c.id === input.commentId || c.commentId === input.commentId || c.importedId === input.commentId,
+    );
+    const visited = new Set<string>();
+    while (item?.parentCommentId && !visited.has(item.id)) {
+      visited.add(item.id);
+      item = commentsList.find(
+        (c) =>
+          c.id === item!.parentCommentId ||
+          c.commentId === item!.parentCommentId ||
+          c.importedId === item!.parentCommentId,
+      );
+    }
+
+    if (!item) return { success: false as const, failure: { code: 'TARGET_NOT_FOUND', message: 'missing' } };
+    return setActiveComment({ commentId: item.id })
+      ? {
+          success: true as const,
+          updated: [{ kind: 'entity' as const, entityType: 'comment' as const, entityId: item.id }],
+        }
+      : { success: false as const, failure: { code: 'INVALID_TARGET', message: 'failed' } };
+  });
 
   const editor: {
     on: ReturnType<typeof vi.fn>;
@@ -80,7 +111,7 @@ function makeStubs(
           activeChangeIds: [],
         })),
       },
-      comments: { create, patch, delete: del, list },
+      comments: { create, patch, delete: del, list, setActive },
     },
     commands: { setActiveComment, setCursorById },
     // Self-reference assigned below so toolbar source resolution sees
@@ -115,7 +146,7 @@ function makeStubs(
   return {
     superdoc,
     editor,
-    mocks: { create, patch, delete: del, list, navigateTo, setActiveComment, setCursorById },
+    mocks: { create, patch, delete: del, list, navigateTo, setActive, setActiveComment, setCursorById },
   };
 }
 
@@ -512,13 +543,14 @@ describe('ui.comments — actions route through editor.doc.*', () => {
 });
 
 describe('ui.comments.setActive — activate-only highlight', () => {
-  it('routes a known comment id through the setActiveComment command', () => {
+  it('routes a known comment id through the doc-api setActive operation', () => {
     const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
     const ui = createSuperDocUI({ superdoc });
 
     const ok = ui.comments.setActive('c-1');
 
     expect(ok).toBe(true);
+    expect(mocks.setActive).toHaveBeenCalledWith({ commentId: 'c-1' });
     expect(mocks.setActiveComment).toHaveBeenCalledTimes(1);
     expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-1' });
 
@@ -532,6 +564,7 @@ describe('ui.comments.setActive — activate-only highlight', () => {
     const ok = ui.comments.setActive(null);
 
     expect(ok).toBe(true);
+    expect(mocks.setActive).toHaveBeenCalledWith({ commentId: null });
     expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: null });
 
     ui.destroy();
@@ -563,8 +596,8 @@ describe('ui.comments.setActive — activate-only highlight', () => {
 
   it('validates against the imported Word id, not just the native id', () => {
     // Imported Word comments carry a separate `importedId` that the
-    // highlight painter also keys on; consumers loading from .docx
-    // activate by that id, so it must be accepted.
+    // doc-api setActive path canonicalizes before dispatching to the
+    // highlight painter.
     const { superdoc, mocks } = makeStubs({
       comments: [{ id: 'native-1', commentId: 'native-1', importedId: 'imported-abc' }],
     });
@@ -573,7 +606,26 @@ describe('ui.comments.setActive — activate-only highlight', () => {
     const ok = ui.comments.setActive('imported-abc');
 
     expect(ok).toBe(true);
-    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'imported-abc' });
+    expect(mocks.setActive).toHaveBeenCalledWith({ commentId: 'imported-abc' });
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'native-1' });
+
+    ui.destroy();
+  });
+
+  it('uses the anchored thread root when passed a reply id', () => {
+    const { superdoc, mocks } = makeStubs({
+      comments: [
+        { id: 'c-root', commentId: 'c-root' },
+        { id: 'c-reply', commentId: 'c-reply', parentCommentId: 'c-root' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('c-reply');
+
+    expect(ok).toBe(true);
+    expect(mocks.setActive).toHaveBeenCalledWith({ commentId: 'c-reply' });
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-root' });
 
     ui.destroy();
   });
@@ -587,6 +639,24 @@ describe('ui.comments.setActive — activate-only highlight', () => {
 
     expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-1' });
     expect(ok).toBe(false);
+
+    ui.destroy();
+  });
+
+  it('returns false when the editor doc getter throws', () => {
+    const { superdoc, editor, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    Object.defineProperty(editor, 'doc', {
+      get() {
+        throw new Error('not ready');
+      },
+    });
+
+    const ok = ui.comments.setActive('c-1');
+
+    expect(ok).toBe(false);
+    expect(mocks.setActive).not.toHaveBeenCalled();
 
     ui.destroy();
   });

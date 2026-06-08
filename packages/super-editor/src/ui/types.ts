@@ -1637,7 +1637,7 @@ export type CustomCommandHandleState<TValue = unknown> = {
  * Comments domain handle exposed on `ui.comments`. The mutation
  * methods (`createFromSelection`, `createFromCapture`, `reply`,
  * `resolve`, `reopen`, `delete`) are convenience facades over
- * `editor.doc.comments.*` — they produce identical document mutations
+ * `editor.doc.comments.*` - they produce identical document mutations
  * to direct doc-API calls. `setActive` and `scrollTo` are UI-only
  * helpers: they drive highlight / viewport state and do not mutate the
  * document.
@@ -1714,18 +1714,22 @@ export interface CommentsHandle {
    * rect + your own scroll) and only need to mark it active afterwards.
    * Unlike `scrollTo`, it does not move the caret or scroll.
    *
-   * It also does not change `getSnapshot().activeIds` — that set stays
+   * It also does not change `getSnapshot().activeIds` - that set stays
    * selection-derived, so the document highlight and the snapshot's
    * active set are intentionally decoupled. (A future `focusedId` on
    * the slice could expose this to subscribers if a consumer needs it.)
    *
-   * Returns `true` when the activation request was accepted and
-   * dispatched — including an idempotent call for an id that is already
-   * active. Returns `false` when no editor is mounted, when the
-   * underlying command reports failure, or when a non-null `commentId`
-   * matches no current comment — activating an unknown id would
-   * otherwise fade every other comment as if some other comment were
-   * active.
+   * The highlight follows the editor's active-comment state. Because
+   * this method intentionally does not move the caret into the comment,
+   * a later selection change can clear the highlight.
+   *
+   * Returns `true` when the activation request was accepted, including
+   * an idempotent call for an id that is already active. Returns `false`
+   * when no editor is mounted, when the editor is not ready, when the
+   * underlying operation reports failure, or when a non-null
+   * `commentId` matches no current comment - activating an unknown id
+   * would otherwise fade every other comment as if some other comment
+   * were active.
    */
   setActive(commentId: string | null): boolean;
   /**
