@@ -88,6 +88,10 @@ test('typing in the font combobox applies to the selected text without opening t
   await superdoc.type('Combobox font sample');
   await superdoc.waitForStable();
 
+  // Pin document fonts: async font detection can add document-derived families whose
+  // names also start with the typed prefix, making autocomplete pick a different font.
+  await stubDocumentFontsAndNotify(superdoc, []);
+
   const pos = await superdoc.findTextPos('Combobox font sample');
   await superdoc.setTextSelection(pos, pos + 'Combobox font sample'.length);
   await superdoc.waitForStable();
@@ -108,6 +112,9 @@ test('tabbing through font family and size returns to the editor with formatting
   await superdoc.type('Keyboard flow sample');
   await superdoc.waitForStable();
 
+  // Pin document fonts so the typed prefix matches deterministically (see test above).
+  await stubDocumentFontsAndNotify(superdoc, []);
+
   const pos = await superdoc.findTextPos('Keyboard flow sample');
   await superdoc.setTextSelection(pos, pos + 'Keyboard flow sample'.length);
   await superdoc.waitForStable();
@@ -124,6 +131,22 @@ test('tabbing through font family and size returns to the editor with formatting
   await fontSizeInput.fill('18');
   await fontSizeInput.press('Tab');
   await expectEditorFocused(superdoc);
+
+  // Off-focus font commands are queued and replayed on the next selection update;
+  // wait for them to land on the selected text before typing the continuation.
+  await expect
+    .poll(async () => {
+      try {
+        await superdoc.assertTextMarkAttrs('Keyboard flow sample', 'textStyle', {
+          fontFamily: 'Courier New',
+          fontSize: '18pt',
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
 
   await superdoc.page.keyboard.type('Done');
   await superdoc.waitForStable();
