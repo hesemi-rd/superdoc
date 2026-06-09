@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FONT_OFFERINGS,
+  getBuiltInToolbarFontOfferings,
   getDefaultFontOfferings,
   getDefaultFontFamilyOptions,
   fontOfferingStack,
@@ -9,6 +10,7 @@ import {
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
 const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman'];
+const EXPECTED_BUILT_IN_TOOLBAR = ['Arial', 'Calibri', 'Cooper Black', 'Courier New', 'Helvetica', 'Times New Roman'];
 
 /**
  * Must NOT appear as DEFAULT options yet. Aptos/Georgia/Baskerville/Arial Narrow are not bundled (or
@@ -30,6 +32,15 @@ describe('font offerings', () => {
     }
   });
 
+  it('built-in toolbar offerings include bundled qualified rows without reclassifying them as defaults', () => {
+    expect(getBuiltInToolbarFontOfferings().map((o) => o.logicalFamily)).toEqual(EXPECTED_BUILT_IN_TOOLBAR);
+    expect(getBuiltInToolbarFontOfferings().find((o) => o.logicalFamily === 'Cooper Black')).toMatchObject({
+      offering: 'qualified',
+      verdict: 'visual_only',
+      bundled: true,
+    });
+  });
+
   it('classifies the qualified and category rows distinctly (carried for the later fidelity layer)', () => {
     const byName = (n: string) => FONT_OFFERINGS.find((o) => o.logicalFamily === n);
     expect(byName('Cambria')).toMatchObject({ offering: 'qualified', verdict: 'visual_only', bundled: true });
@@ -41,6 +52,7 @@ describe('font offerings', () => {
     expect(getDefaultFontFamilyOptions()).toEqual([
       { label: 'Arial', value: 'Arial, sans-serif' },
       { label: 'Calibri', value: 'Calibri, sans-serif' },
+      { label: 'Cooper Black', value: 'Cooper Black, serif' },
       { label: 'Courier New', value: 'Courier New, monospace' },
       { label: 'Helvetica', value: 'Helvetica, sans-serif' },
       { label: 'Times New Roman', value: 'Times New Roman, serif' },
