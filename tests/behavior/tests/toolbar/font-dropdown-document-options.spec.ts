@@ -10,6 +10,7 @@ const DEFAULT_FONT_LABELS = [
   'Arial Black',
   'Arial Narrow',
   'Baskerville Old Face',
+  'Bookman Old Style',
   'Brush Script MT',
   'Calibri',
   'Century',

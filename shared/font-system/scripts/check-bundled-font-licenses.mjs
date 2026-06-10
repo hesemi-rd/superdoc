@@ -20,12 +20,13 @@ const notices = {
 };
 
 const BUNDLED_FONT_SPDX =
-  'OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0)';
+  'OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0';
 const VALID_LICENSES = new Set([
   'OFL-1.1',
   'Apache-2.0',
   'AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817',
   'GPL-2.0-only WITH Font-exception-2.0',
+  'LicenseRef-GUST-Font-License-1.0',
 ]);
 const VALID_WEIGHTS = new Set(['normal', 'bold']);
 const VALID_STYLES = new Set(['normal', 'italic']);
@@ -172,6 +173,12 @@ if (errors.length === 0) {
     }
     if (family.license === 'GPL-2.0-only WITH Font-exception-2.0' && !family.licenseFiles?.includes('GPL-2.0.txt')) {
       fail(`${familyName}: GPL-2.0 row must list GPL-2.0.txt`);
+    }
+    if (
+      family.license === 'LicenseRef-GUST-Font-License-1.0' &&
+      !family.licenseFiles?.includes('GUST-Font-License-1.0.txt')
+    ) {
+      fail(`${familyName}: GUST row must list GUST-Font-License-1.0.txt`);
     }
 
     if (!Array.isArray(family.faces) || family.faces.length === 0) {

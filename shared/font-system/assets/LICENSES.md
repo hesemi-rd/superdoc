@@ -2,15 +2,16 @@
 
 _Location: `shared/font-system/assets/LICENSES.md`. This file ships in the same
 directory as the font files, `OFL.txt`, `Apache-2.0.txt`, `AGPL-3.0.txt`, and
-`GPL-2.0.txt`, and travels with them in every distribution. Notices below come
-from the shipped fonts' `name` tables, with name-table line breaks normalized
-for readability. The original five-family set was reviewed on 2026-06-03.
-Caprasimo was added from DocFonts' Google Fonts OFL provenance on 2026-06-08.
-Gelasio, Cardo, Comic Relief, Noto Sans, PT Sans, Bacasime Antique, Oregano
-Italic, and Noto Sans Mono were added from DocFonts' Google Fonts provenance on
-2026-06-09. C059 and Liberation Sans Narrow were added from the legal-reviewed
-asset package on 2026-06-09. Archivo Black and PT Sans Narrow were added from
-DocFonts' Google Fonts provenance on 2026-06-10._
+`GPL-2.0.txt`, and `GUST-Font-License-1.0.txt`, and travels with them in every
+distribution. Notices below come from the shipped fonts' `name` tables, with
+name-table line breaks normalized for readability. The original five-family set
+was reviewed on 2026-06-03. Caprasimo was added from DocFonts' Google Fonts OFL
+provenance on 2026-06-08. Gelasio, Cardo, Comic Relief, Noto Sans, PT Sans,
+Bacasime Antique, Oregano Italic, and Noto Sans Mono were added from DocFonts'
+Google Fonts provenance on 2026-06-09. C059 and Liberation Sans Narrow were
+added from the legal-reviewed asset package on 2026-06-09. Archivo Black and PT
+Sans Narrow were added from DocFonts' Google Fonts provenance on 2026-06-10.
+TeX Gyre Bonum was added from CTAN TeX Gyre provenance on 2026-06-10._
 
 ## Scope (read first)
 
@@ -31,11 +32,11 @@ obligation; SuperDoc satisfies it by pointing to the exact unmodified upstream
 release recorded in the table below. These fonts are not relicensed under
 SuperDoc's AGPLv3 or commercial terms.
 
-These notices, `OFL.txt`, `Apache-2.0.txt`, `AGPL-3.0.txt`, and `GPL-2.0.txt`
-are a single unit. Distribute them together with the font files wherever the
-fonts go.
+These notices, `OFL.txt`, `Apache-2.0.txt`, `AGPL-3.0.txt`, `GPL-2.0.txt`, and
+`GUST-Font-License-1.0.txt` are a single unit. Distribute them together with the
+font files wherever the fonts go.
 
-SPDX license expression for this bundled font set: `OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0)`.
+SPDX license expression for this bundled font set: `OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0`.
 Machine-readable asset metadata: `font-assets.manifest.json`.
 
 ## Families
@@ -60,6 +61,7 @@ Machine-readable asset metadata: `font-assets.manifest.json`.
 | Noto Sans Mono | Lucida Console | OFL-1.1 | none | 2.014 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/notosansmono |
 | PT Sans | Trebuchet MS | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsans |
 | PT Sans Narrow | Gill Sans MT Condensed | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsansnarrow |
+| TeX Gyre Bonum | Bookman Old Style | LicenseRef-GUST-Font-License-1.0 | none | 2.004 | CTAN fonts/tex-gyre/opentype |
 
 \* The Liberation v2.1.5 files carry no OFL Reserved Font Name. "Liberation" is a
 registered Red Hat trademark, which is separate from an OFL RFN. SuperDoc names
@@ -207,10 +209,16 @@ Trademark: PT Sans is a trademark of the ParaType Ltd.
 License description: This Font Software is licensed under the Open Font License, Version 1.1
 ```
 
+**TeX Gyre Bonum** - LicenseRef-GUST-Font-License-1.0
+
+```text
+Copyright 2006, 2009 for TeX Gyre extensions by B. Jackowski and J.M. Nowacki (on behalf of TeX users groups). This work is released under the GUST Font License --  see http://tug.org/fonts/licenses/GUST-FONT-LICENSE.txt for details.
+```
+
 ## Conversion notice (covers OFL section 1 / FAQ 2.2.1 and Apache-2.0 section 4(b))
 
 The static-source WOFF2 faces in this distribution are **format-only
-conversions** of the TrueType sources, produced with `fontTools`
+conversions** of the source fonts, produced with `fontTools`
 (`flavor="woff2"`, Brotli) with **no subsetting** and the WOFF2 **metadata block
 omitted**. No glyph outlines, advance widths, vertical metrics, `cmap`, or
 `name`-table notices were changed.
@@ -235,12 +243,16 @@ format-only WOFF2 conversion applies, with no design, metric, glyph, `cmap`, or
 exact upstream releases recorded in the Families table; the unmodified upstream
 OTF/TTF files are the preferred form for modification.
 
+For TeX Gyre Bonum under the GUST Font License, the same format-only WOFF2
+conversion applies, with no design, metric, glyph, `cmap`, or `name`-table
+change.
+
 ## Verification evidence (current ship set)
 
-- **43 / 53 WOFF2 faces:** static-source WOFF2 flavor, WOFF2 metadata block
-  omitted, `name` table byte-identical to the source TTF, identical glyph count
+- **47 / 57 WOFF2 faces:** static-source WOFF2 flavor, WOFF2 metadata block
+  omitted, `name` table byte-identical to the source font, identical glyph count
   and `cmap`.
-- **10 / 53 WOFF2 faces:** static variable-font instances for Gelasio, Noto
+- **10 / 57 WOFF2 faces:** static variable-font instances for Gelasio, Noto
   Sans, and Noto Sans Mono, generated at regular and bold weights with no
   subsetting.
 - **Metrics:** `unitsPerEm`, `hhea` ascent/descent, selected OS/2 metrics,
@@ -258,6 +270,8 @@ OTF/TTF files are the preferred form for modification.
   this directory.
 - GPL-2.0-only WITH Font-exception-2.0 (Liberation Sans Narrow): `GPL-2.0.txt` in
   this directory.
+- LicenseRef-GUST-Font-License-1.0 (TeX Gyre Bonum): `GUST-Font-License-1.0.txt`
+  in this directory.
 
 SuperDoc does not relicense these fonts. They remain under their own OFL-1.1 /
 Apache-2.0 / AGPL-3.0 / GPL-2.0 terms regardless of the license under which

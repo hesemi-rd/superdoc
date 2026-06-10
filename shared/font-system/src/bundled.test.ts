@@ -57,6 +57,12 @@ describe('installBundledSubstitutes URL resolution', () => {
       'url(/fonts/PTSansNarrow-Regular.woff2)',
       'url(/fonts/PTSansNarrow-Bold.woff2)',
     ]);
+    expect(reg.sourcesFor('TeX Gyre Bonum')).toEqual([
+      'url(/fonts/TeXGyreBonum-Regular.woff2)',
+      'url(/fonts/TeXGyreBonum-Bold.woff2)',
+      'url(/fonts/TeXGyreBonum-Italic.woff2)',
+      'url(/fonts/TeXGyreBonum-BoldItalic.woff2)',
+    ]);
   });
 
   it('uses assetBaseUrl and normalizes a missing trailing slash', () => {

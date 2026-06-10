@@ -8,6 +8,7 @@ describe('DEFAULT_FONT_FAMILY_OPTIONS (headless default font options, derived fr
       { label: 'Arial Black', value: 'Arial Black, sans-serif' },
       { label: 'Arial Narrow', value: 'Arial Narrow, sans-serif' },
       { label: 'Baskerville Old Face', value: 'Baskerville Old Face, serif' },
+      { label: 'Bookman Old Style', value: 'Bookman Old Style, serif' },
       { label: 'Brush Script MT', value: 'Brush Script MT, serif' },
       { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Century', value: 'Century, serif' },

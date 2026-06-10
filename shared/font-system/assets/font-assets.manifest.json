@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "spdxExpression": "OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0)",
-  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09; C059 and Liberation Sans Narrow added from legal-reviewed asset package, 2026-06-09; Arial Black and PT Sans Narrow added from DocFonts Google Fonts provenance, 2026-06-10",
+  "spdxExpression": "OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0",
+  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09; C059 and Liberation Sans Narrow added from legal-reviewed asset package, 2026-06-09; Arial Black and PT Sans Narrow added from DocFonts Google Fonts provenance, 2026-06-10; TeX Gyre Bonum added from CTAN TeX Gyre provenance, 2026-06-10",
   "families": [
     {
       "family": "Carlito",
@@ -655,6 +655,61 @@
           "weight": "bold",
           "style": "normal",
           "sha256": "db2d67222555640591ce4a38ce8483c96ac310b70e195a6c279d99a09de34e8d"
+        }
+      ]
+    },
+    {
+      "family": "TeX Gyre Bonum",
+      "replaces": ["Bookman Old Style"],
+      "license": "LicenseRef-GUST-Font-License-1.0",
+      "licenseFiles": ["GUST-Font-License-1.0.txt"],
+      "version": "2.004",
+      "upstreamSource": "CTAN fonts/tex-gyre/opentype, TeX Gyre Bonum OTF sources",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2006, 2009 for TeX Gyre extensions by B. Jackowski and J.M. Nowacki (on behalf of TeX users groups).",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "texgyrebonum-regular.otf",
+          "sha256": "8ad5a53ae61d710fe1773f4ecc7fdf6dde7df1df59faa4492a24def95077d6b3"
+        },
+        {
+          "file": "texgyrebonum-bold.otf",
+          "sha256": "173710158270252ec1ddd5e69a07fc71853680c7188d67a84d794a465a4dff81"
+        },
+        {
+          "file": "texgyrebonum-italic.otf",
+          "sha256": "518836a0e5bd71f644ae131185be53b04fadb30ef7dbdc483deb5f69bd1fe47d"
+        },
+        {
+          "file": "texgyrebonum-bolditalic.otf",
+          "sha256": "bd037941d21149ea0d650286537a3266fadfb03f91b4a5a78848ea5781befac9"
+        }
+      ],
+      "faces": [
+        {
+          "file": "TeXGyreBonum-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "290ac608070a4733a7a2965696d0ef109b28052ca213e806b61b835e9f35d00c"
+        },
+        {
+          "file": "TeXGyreBonum-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "54875112cd57f25497802cc3b6b180b565ce5ce82e439f12db1dade7dbc2b20e"
+        },
+        {
+          "file": "TeXGyreBonum-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "89a9f0e2dbdeb2c3f08d8069fc52ea8147ca2b98e33e0c197d4455cf7e9be6fe"
+        },
+        {
+          "file": "TeXGyreBonum-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "a1fc783990dc854f94e72aae17cc11f39612cbf3a88a33b1f6553fd2f7e4205d"
         }
       ]
     }

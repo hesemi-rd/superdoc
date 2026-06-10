@@ -15,7 +15,8 @@ export type BundledLicense =
   | 'OFL-1.1'
   | 'Apache-2.0'
   | 'AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817'
-  | 'GPL-2.0-only WITH Font-exception-2.0';
+  | 'GPL-2.0-only WITH Font-exception-2.0'
+  | 'LicenseRef-GUST-Font-License-1.0';
 
 /** One shippable face of a bundled family: its style axis + the asset filename. */
 export interface BundledFaceFile {
@@ -102,4 +103,5 @@ export const BUNDLED_MANIFEST: readonly BundledFamilyManifest[] = Object.freeze(
     { weight: 'normal', style: 'normal', file: 'PTSansNarrow-Regular.woff2' },
     { weight: 'bold', style: 'normal', file: 'PTSansNarrow-Bold.woff2' },
   ]),
+  family('TeX Gyre Bonum', 'TeXGyreBonum', 'LicenseRef-GUST-Font-License-1.0'),
 ]);

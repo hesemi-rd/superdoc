@@ -189,6 +189,7 @@ describe('domain hooks', () => {
       'Arial Black',
       'Arial Narrow',
       'Baskerville Old Face',
+      'Bookman Old Style',
       'Brush Script MT',
       'Calibri',
       'Century',

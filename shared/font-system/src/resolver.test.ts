@@ -21,6 +21,7 @@ describe('font resolver', () => {
     expect(resolvePhysicalFamily('Century Schoolbook')).toBe('C059');
     expect(resolvePhysicalFamily('Cooper Black')).toBe('Caprasimo');
     expect(resolvePhysicalFamily('Baskerville Old Face')).toBe('Bacasime Antique');
+    expect(resolvePhysicalFamily('Bookman Old Style')).toBe('TeX Gyre Bonum');
     expect(resolvePhysicalFamily('Brush Script MT')).toBe('Oregano Italic');
     expect(resolvePhysicalFamily('Georgia')).toBe('Gelasio');
     expect(resolvePhysicalFamily('Garamond')).toBe('Cardo');
@@ -68,6 +69,11 @@ describe('font resolver', () => {
     expect(resolveFontFamily('Baskerville Old Face')).toEqual({
       logicalFamily: 'Baskerville Old Face',
       physicalFamily: 'Bacasime Antique',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Bookman Old Style')).toEqual({
+      logicalFamily: 'Bookman Old Style',
+      physicalFamily: 'TeX Gyre Bonum',
       reason: 'bundled_substitute',
     });
     expect(resolveFontFamily('Arial Narrow')).toEqual({

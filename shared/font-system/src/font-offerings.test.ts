@@ -15,6 +15,7 @@ const EXPECTED_BUILT_IN_TOOLBAR = [
   'Arial Black',
   'Arial Narrow',
   'Baskerville Old Face',
+  'Bookman Old Style',
   'Brush Script MT',
   'Calibri',
   'Century',
@@ -46,6 +47,7 @@ const NOT_DEFAULT_YET = [
   'Arial Black',
   'Calibri Light',
   'Baskerville Old Face',
+  'Bookman Old Style',
   'Arial Narrow',
   'Century',
   'Century Schoolbook',
@@ -96,6 +98,12 @@ describe('font offerings', () => {
       verdict: 'visual_only',
       bundled: true,
       physicalFamily: 'Bacasime Antique',
+    });
+    expect(byName('Bookman Old Style')).toMatchObject({
+      offering: 'qualified',
+      verdict: 'visual_only',
+      bundled: true,
+      physicalFamily: 'TeX Gyre Bonum',
     });
     expect(byName('Arial Narrow')).toMatchObject({
       offering: 'qualified',
@@ -155,6 +163,7 @@ describe('font offerings', () => {
       { label: 'Arial Black', value: 'Arial Black, sans-serif' },
       { label: 'Arial Narrow', value: 'Arial Narrow, sans-serif' },
       { label: 'Baskerville Old Face', value: 'Baskerville Old Face, serif' },
+      { label: 'Bookman Old Style', value: 'Bookman Old Style, serif' },
       { label: 'Brush Script MT', value: 'Brush Script MT, serif' },
       { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Century', value: 'Century, serif' },
