@@ -84,6 +84,7 @@ describe('buildFontReport', () => {
       'Caprasimo',
       'Archivo Black',
       'Bacasime Antique',
+      'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
       'Noto Sans',
@@ -102,6 +103,7 @@ describe('buildFontReport', () => {
         'Courier New',
         'Cooper Black',
         'Baskerville Old Face',
+        'Bookman Old Style',
         'Brush Script MT',
         'Georgia',
         'Lucida Console',
@@ -120,6 +122,7 @@ describe('buildFontReport', () => {
       'Liberation Mono',
       'Caprasimo',
       'Bacasime Antique',
+      'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
       'Noto Sans Mono',
@@ -131,6 +134,10 @@ describe('buildFontReport', () => {
       missing: false,
     });
     expect(report.find((r) => r.logicalFamily === 'Baskerville Old Face')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Bookman Old Style')).toMatchObject({
       reason: 'bundled_substitute',
       missing: false,
     });

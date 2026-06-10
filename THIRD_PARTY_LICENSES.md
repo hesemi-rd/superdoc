@@ -23,10 +23,11 @@ Web-font delivery is distribution under the SIL Open Font License, so these term
 are written to the broadest redistribution case and cover lighter delivery
 models too. The authoritative per-family record and the full license texts ship
 alongside the fonts at `shared/font-system/assets/` (`LICENSES.md`, `OFL.txt`,
-`Apache-2.0.txt`, `AGPL-3.0.txt`, `GPL-2.0.txt`). Distribute that notice set
-together with the font files.
+`Apache-2.0.txt`, `AGPL-3.0.txt`, `GPL-2.0.txt`,
+`GUST-Font-License-1.0.txt`). Distribute that notice set together with the font
+files.
 
-SPDX license expression for this bundled font set: `OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0)`.
+SPDX license expression for this bundled font set: `OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0`.
 
 C059 and Liberation Sans Narrow are copyleft fonts with document-embedding
 exceptions. The exceptions mean embedding the fonts into a rendered document does
@@ -56,6 +57,7 @@ unmodified upstream release pointers recorded in `shared/font-system/assets/LICE
 | Noto Sans Mono | Lucida Console | OFL-1.1 | none | 2.014 |
 | PT Sans | Trebuchet MS | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL |
 | PT Sans Narrow | Gill Sans MT Condensed | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL |
+| TeX Gyre Bonum | Bookman Old Style | LicenseRef-GUST-Font-License-1.0 | none | 2.004 |
 
 ### Copyright & trademark notices from the font `name` tables
 
@@ -75,18 +77,19 @@ unmodified upstream release pointers recorded in `shared/font-system/assets/LICE
 - **Noto Sans Mono** (OFL-1.1): `Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic).` Noto is a trademark of Google LLC. The v2.014 files declare no OFL Reserved Font Name.
 - **PT Sans** (OFL-1.1): `Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names "PT Sans", "PT Serif" and "ParaType".`
 - **PT Sans Narrow** (OFL-1.1): `Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names "PT Sans", "PT Serif" and "ParaType".` PT Sans is a trademark of the ParaType Ltd.
+- **TeX Gyre Bonum** (LicenseRef-GUST-Font-License-1.0): `Copyright 2006, 2009 for TeX Gyre extensions by B. Jackowski and J.M. Nowacki (on behalf of TeX users groups).`
 
 ### Format conversion
 
-The static-source bundled faces are format-only TrueType-to-WOFF2 conversions
+The static-source bundled faces are format-only source-font-to-WOFF2 conversions
 (`fontTools`, `flavor="woff2"`, Brotli; no subsetting; WOFF2 metadata omitted).
 No design, metric, glyph, `cmap`, or `name`-table change. Gelasio, Noto Sans,
 and Noto Sans Mono ship as static WOFF2 instances generated from upstream
 variable TrueType sources at the regular and bold weights; Noto Sans and Noto
 Sans Mono are also instanced at normal width.
 
-Verified for this ship set: 43 / 53 faces are static-source conversions with a
-WOFF2 `name` table byte-identical to their source TTF, and 10 / 53 faces are
+Verified for this ship set: 47 / 57 faces are static-source conversions with a
+WOFF2 `name` table byte-identical to their source font, and 10 / 57 faces are
 static variable-font instances with no subsetting. All metrics are preserved.
 Under OFL FAQ 2.2.1 the static-source conversions are not Modified Versions and
 retain the original font names. For Caladea, this also serves as the Apache-2.0
@@ -98,10 +101,11 @@ section 4(b) notice.
 - Apache-2.0: `shared/font-system/assets/Apache-2.0.txt`.
 - AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817: `shared/font-system/assets/AGPL-3.0.txt`.
 - GPL-2.0-only WITH Font-exception-2.0: `shared/font-system/assets/GPL-2.0.txt`.
+- LicenseRef-GUST-Font-License-1.0: `shared/font-system/assets/GUST-Font-License-1.0.txt`.
 
-The fonts remain under their own OFL-1.1 / Apache-2.0 / AGPL-3.0 / GPL-2.0
-terms and are not relicensed under SuperDoc's terms (AGPLv3 community build or
-commercial).
+The fonts remain under their own OFL-1.1 / Apache-2.0 / AGPL-3.0 / GPL-2.0 /
+GUST terms and are not relicensed under SuperDoc's terms (AGPLv3 community build
+or commercial).
 
 ---
 

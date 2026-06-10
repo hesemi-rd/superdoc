@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getFallbackDecision, getRenderableFallback } from '@docfonts/fallbacks';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { createFontResolver, resolveFontFamily } from './resolver';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
@@ -21,6 +22,7 @@ const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: s
   ['Century Schoolbook', 'C059'],
   ['Georgia', 'Gelasio'],
   ['Baskerville Old Face', 'Bacasime Antique'],
+  ['Bookman Old Style', 'TeX Gyre Bonum'],
 ];
 
 describe('substitution evidence -> resolver derivation', () => {
@@ -68,16 +70,20 @@ describe('substitution evidence -> resolver derivation', () => {
   });
 
   it('keeps an un-bundled substitute inert until its asset ships (the asset gate, not just the policy)', () => {
-    // The registry recommends substitutes SuperDoc has not shipped a clone for.
-    // canRenderFamily must keep every such row OUT of the resolver: it resolves as_requested, not mapped.
-    const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
-    const unbundled = SUBSTITUTION_EVIDENCE.filter(
-      (r) => r.policyAction === 'substitute' && r.physicalFamily && !bundled.has(r.physicalFamily),
-    );
-    expect(unbundled.length).toBeGreaterThan(0); // the registry really does carry some.
-    for (const row of unbundled) {
-      expect(resolveFontFamily(row.logicalFamily).reason).toBe('as_requested');
-    }
+    // All substitute rows are currently bundled. Prove the gate itself by denying one shipped asset.
+    const denyBonum = (family: string) => family !== 'TeX Gyre Bonum';
+
+    expect(getRenderableFallback('Bookman Old Style', { canRenderFamily: denyBonum })).toBeNull();
+    expect(getFallbackDecision('Bookman Old Style', { canRenderFamily: denyBonum })).toMatchObject({
+      kind: 'asset_missing',
+      substituteFamily: 'TeX Gyre Bonum',
+      evidenceId: 'bookman-old-style',
+    });
+    expect(resolveFontFamily('Bookman Old Style')).toEqual({
+      logicalFamily: 'Bookman Old Style',
+      physicalFamily: 'TeX Gyre Bonum',
+      reason: 'bundled_substitute',
+    });
   });
 
   it('a QUALIFIED row carries the authoritative per-face breakdown its top-level verdict hides', () => {

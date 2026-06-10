@@ -131,6 +131,7 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
       'Arial Narrow',
       'Bangla MN',
       'Baskerville Old Face',
+      'Bookman Old Style',
       'Brush Script MT',
       'Calibri',
       'Century',
