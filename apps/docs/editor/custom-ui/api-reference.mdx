@@ -175,6 +175,8 @@ ui.comments.reply(parentCommentId, { text });
 ui.comments.resolve(commentId);
 ui.comments.reopen(commentId);
 ui.comments.delete(commentId);
+ui.comments.setActive(commentId); // highlight without scrolling or moving selection
+ui.comments.setActive(null); // clear active highlight
 ui.comments.scrollTo(commentId);
 ```
 
@@ -242,8 +244,10 @@ Geometry. Browser-only.
 ```ts
 ui.viewport.getRect({ target: { kind: 'entity', entityType: 'comment', entityId } });
 await ui.viewport.scrollIntoView({ target, block: 'center', behavior: 'smooth' });
+ui.viewport.observe(({ reason }) => {});
 
 ui.viewport.getHost(); // painted host element | null
+ui.viewport.getScrollContainer(); // scroll element | null
 ui.viewport.entityAt({ x, y }); // ViewportEntityHit[]
 ui.viewport.positionAt({ x, y }); // ViewportPositionHit | null
 ui.viewport.contextAt({ x, y }); // ViewportContext (always returns)
