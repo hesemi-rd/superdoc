@@ -510,7 +510,7 @@ test('stable recovery tracks PyPI gaps when SDK PyPI publishing is enabled', asy
   );
 });
 
-test('release configs suppress per-PR comment spam on prereleases', async () => {
+test('release configs keep GitHub prerelease comments gated while Linear uses the dedicated release-comment policy', async () => {
   const releasercPaths = [
     'packages/superdoc/.releaserc.cjs',
     'packages/react/.releaserc.cjs',
@@ -551,8 +551,12 @@ test('release configs suppress per-PR comment spam on prereleases', async () => 
 
     if (usesLinearPlugin) {
       assert.ok(
-        content.includes('addComment: shouldCommentOnRelease'),
-        `${releasercPath}: Linear addComment must be gated through shouldCommentOnRelease so prereleases don't post duplicate Linear comments after a stable -> main sync`,
+        content.includes('const shouldCommentOnLinearRelease = true'),
+        `${releasercPath}: Linear comment policy must be explicit and consistent across configs`,
+      );
+      assert.ok(
+        content.includes('addComment: shouldCommentOnLinearRelease'),
+        `${releasercPath}: Linear addComment must use the dedicated Linear comment gate so prerelease Linear breadcrumbs stay on while GitHub PR comments remain gated`,
       );
       assert.equal(
         content.includes('addComment: true'),
