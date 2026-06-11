@@ -574,17 +574,6 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
 // calculatePageTopFallback is now in position-hit.ts and re-exported above.
 
 /**
- * Given a PM range [from, to), return selection rectangles for highlighting.
- *
- * @param layout - The layout containing page and fragment data
- * @param blocks - Array of flow blocks
- * @param measures - Array of measurements corresponding to blocks
- * @param from - Start PM position
- * @param to - End PM position
- * @param geometryHelper - Optional PageGeometryHelper for accurate Y calculations (recommended)
- * @returns Array of selection rectangles in container space
- */
-/**
  * SD-3328: an empty paragraph / blank line that the selection passes through is a
  * zero-width slice (`pmStart === pmEnd`). `findLinesIntersectingRange` only yields
  * such a line when `from < pos < to`, so it is genuinely spanned and must be
@@ -595,17 +584,38 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
  */
 function pushEmptyLineSelectionBand(
   rects: Rect[],
-  opts: { x: number; y: number; width: number; height: number; pageIndex: number },
+  opts: {
+    x: number;
+    yBase: number;
+    width: number;
+    lineHeight: number;
+    pageIndex: number;
+    measure: ParagraphMeasure;
+    lineIndex: number;
+    startLineIndex: number;
+  },
 ): void {
+  const lineOffset = sumLineHeights(opts.measure, opts.startLineIndex, opts.lineIndex);
   rects.push({
     x: opts.x,
-    y: opts.y,
+    y: opts.yBase + lineOffset,
     width: Math.max(1, opts.width),
-    height: opts.height,
+    height: opts.lineHeight,
     pageIndex: opts.pageIndex,
   });
 }
 
+/**
+ * Given a PM range [from, to), return selection rectangles for highlighting.
+ *
+ * @param layout - The layout containing page and fragment data
+ * @param blocks - Array of flow blocks
+ * @param measures - Array of measurements corresponding to blocks
+ * @param from - Start PM position
+ * @param to - End PM position
+ * @param geometryHelper - Optional PageGeometryHelper for accurate Y calculations (recommended)
+ * @returns Array of selection rectangles in container space
+ */
 export function selectionToRects(
   layout: Layout,
   blocks: FlowBlock[],
@@ -649,14 +659,15 @@ export function selectionToRects(
           const sliceTo = Math.min(range.pmEnd, to);
           if (sliceFrom >= sliceTo) {
             // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
-            const emptyLineOffset =
-              lineHeightBeforeIndex(measure, index) - lineHeightBeforeIndex(measure, fragment.fromLine);
             pushEmptyLineSelectionBand(rects, {
               x: fragment.x,
-              y: fragment.y + emptyLineOffset + pageTopY,
+              yBase: fragment.y + pageTopY,
               width: fragment.width,
-              height: line.lineHeight,
+              lineHeight: line.lineHeight,
               pageIndex,
+              measure,
+              lineIndex: index,
+              startLineIndex: fragment.fromLine,
             });
             return;
           }
@@ -1001,21 +1012,21 @@ export function selectionToRects(
                 const sliceTo = Math.min(range.pmEnd, to);
                 if (sliceFrom >= sliceTo) {
                   // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
-                  const emptyLineOffset =
-                    lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
                   pushEmptyLineSelectionBand(rects, {
                     x: fragment.x + contentOffsetX + cellX + padding.left,
-                    y:
+                    yBase:
                       fragment.y +
                       contentOffsetY +
                       rowOffset +
                       blockTopCursor +
                       effectiveSpacingBeforePx +
-                      emptyLineOffset +
                       pageTopY,
                     width: cellMeasure.width - padding.left - padding.right,
-                    height: line.lineHeight,
+                    lineHeight: line.lineHeight,
                     pageIndex,
+                    measure: info.measure,
+                    lineIndex: index,
+                    startLineIndex: info.startLine,
                   });
                   return;
                 }

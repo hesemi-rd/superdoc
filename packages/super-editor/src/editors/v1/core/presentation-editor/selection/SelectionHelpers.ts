@@ -1,6 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { FlowBlock } from '@superdoc/contracts';
 import { findParagraphBoundaries, findWordBoundaries } from '@superdoc/layout-bridge';
+import { cellWrapping } from '@extensions/table/tableHelpers/cellWrapping.js';
 
 /**
  * Unicode-aware regular expression for matching word characters.
@@ -201,17 +202,9 @@ export function selectionCollapsesAcrossTableCells(doc: ProseMirrorNode, anchor:
     const $from = doc.resolve(Math.min(anchor, head));
     const $to = doc.resolve(Math.max(anchor, head));
 
-    const cellAncestor = (pos: typeof $from): ProseMirrorNode | null => {
-      for (let depth = pos.depth; depth > 0; depth--) {
-        const role = pos.node(depth).type.spec.tableRole;
-        if (role === 'cell' || role === 'header_cell') return pos.node(depth);
-      }
-      return null;
-    };
-
     // Mirrors prosemirror-tables `isTextSelectionAcrossCells`: endpoints in different cells
     // (or one outside the table entirely) with the head at the start of its block.
-    return cellAncestor($from) !== cellAncestor($to) && $to.parentOffset === 0;
+    return cellWrapping($from) !== cellWrapping($to) && $to.parentOffset === 0;
   } catch {
     return false;
   }

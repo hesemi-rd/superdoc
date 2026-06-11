@@ -12,6 +12,7 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { cellAround, findTable, inSameTable } from 'prosemirror-tables';
 import type { CellAnchorState } from '../types.js';
 import type { FlowBlock, Layout, Measure, TableBlock } from '@superdoc/contracts';
 import {
@@ -102,6 +103,28 @@ export function getTopLevelTableBlockAtPos(
   if (tableIndex === null) return null;
 
   return getTableBlocks(blocks)[tableIndex] ?? null;
+}
+
+type ResolvedCellContext = {
+  $cell: ReturnType<ProseMirrorNode['resolve']>;
+  cellPos: number;
+  tablePos: number;
+};
+
+function resolveCellContextAtResolvedPos(
+  $pos: ReturnType<ProseMirrorNode['resolve']>,
+): ResolvedCellContext | null {
+  const $cell = cellAround($pos);
+  if (!$cell) return null;
+
+  const table = findTable($cell);
+  if (!table) return null;
+
+  return {
+    $cell,
+    cellPos: $cell.pos,
+    tablePos: table.pos,
+  };
 }
 
 export function resolveCellAnchorStateFromCellPos(
@@ -352,21 +375,10 @@ export function resolveCellContext(
     return null;
   }
 
-  let cellDepth = -1;
-  let tableDepth = -1;
-  for (let depth = $pos.depth; depth > 0; depth--) {
-    const role = $pos.node(depth).type.spec.tableRole;
-    if (cellDepth === -1 && (role === 'cell' || role === 'header_cell')) {
-      cellDepth = depth;
-    }
-    if (cellDepth !== -1 && role === 'table') {
-      tableDepth = depth;
-      break;
-    }
-  }
-  if (cellDepth === -1 || tableDepth === -1) return null;
+  const context = resolveCellContextAtResolvedPos($pos);
+  if (!context) return null;
 
-  return { cellPos: $pos.before(cellDepth), tablePos: $pos.before(tableDepth) };
+  return { cellPos: context.cellPos, tablePos: context.tablePos };
 }
 
 /**
@@ -386,10 +398,21 @@ export function resolveCrossCellSelection(
   anchorPos: number,
   headPos: number,
 ): { anchorCellPos: number; headCellPos: number } | null {
-  const anchor = resolveCellContext(doc, anchorPos);
-  const head = resolveCellContext(doc, headPos);
+  if (!doc) return null;
+
+  let $anchorPos: ReturnType<ProseMirrorNode['resolve']>;
+  let $headPos: ReturnType<ProseMirrorNode['resolve']>;
+  try {
+    $anchorPos = doc.resolve(anchorPos);
+    $headPos = doc.resolve(headPos);
+  } catch {
+    return null;
+  }
+
+  const anchor = resolveCellContextAtResolvedPos($anchorPos);
+  const head = resolveCellContextAtResolvedPos($headPos);
   if (!anchor || !head) return null;
-  if (anchor.tablePos !== head.tablePos) return null; // different tables
+  if (!inSameTable(anchor.$cell, head.$cell)) return null; // different tables
   if (anchor.cellPos === head.cellPos) return null; // same cell -> text selection
   return { anchorCellPos: anchor.cellPos, headCellPos: head.cellPos };
 }
