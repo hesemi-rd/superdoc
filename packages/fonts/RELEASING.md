@@ -1,44 +1,45 @@
 # Releasing @superdoc-dev/fonts
 
-This package is not yet wired into the automated release pipeline. The first publish is manual;
-recurring CI publishing is a follow-up.
+`@superdoc-dev/fonts` is wired into semantic-release:
 
-## First publish (manual, required once)
+- pushes to `main` publish prereleases on the `next` dist-tag
+- stable releases run through `release-stable.yml`
+- tags use `fonts-v${version}`
 
-We are not wiring release automation into this PR. The first publish is done by hand so we can
-publish `0.1.0` under the `@superdoc-dev` org with a deliberate version, rather than letting
-automation pick it. Use the `caio-pizzol` account / a token with publish rights to the `@superdoc-dev`
-org.
+## One-time 0.1.0 bootstrap
+
+Bootstrap must publish npm and push the git tag together. A tag without the npm package makes
+semantic-release think `0.1.0` shipped even though consumers cannot install it.
 
 ```bash
-# from the repo root
-pnpm --filter @superdoc-dev/fonts build   # runs sync-assets + generate + tsc; produces dist/ + assets/
+# from the repo root, on the commit whose bytes should become 0.1.0
+pnpm --filter @superdoc-dev/fonts build
 cd packages/fonts
-npm publish --access public           # publishes @superdoc-dev/fonts@0.1.0
+npm publish --access public
+cd ../..
+git tag fonts-v0.1.0
+git push origin fonts-v0.1.0
 ```
 
-`npm publish` runs `prepare` first, so `dist/` and `assets/` (the 65 `.woff2` + license texts) are
-rebuilt and included in the tarball via `package.json` "files". Verify with `npm pack --dry-run`
-before publishing (expect ~65 `.woff2` plus `dist/*` and license files).
+Before publishing, verify the tarball:
 
-After this, the getting-started examples can move from `@superdoc-dev/fonts: workspace:*` to a published
-version range, and the docs link resolves.
+```bash
+cd packages/fonts
+npm pack --dry-run
+```
 
-## Recurring publishing (follow-up)
+Expect `dist/*`, `src/*`, `assets/LICENSES.md`, license texts, and the bundled `.woff2` assets.
 
-To publish later versions from CI, mirror the `react` package wiring:
+## Automated releases
 
-- `scripts/publish-fonts.cjs` (a semantic-release `publish` plugin, modeled on `scripts/publish-react.cjs`)
-- `.github/workflows/release-fonts.yml` (modeled on `.github/workflows/release-react.yml`)
-- an entry in the `packages` array in `scripts/release-local-stable.mjs` (with a `resumeFontsPublish`)
-- a `fonts-v*` tag prefix
-
-Until that lands, bump the version and re-run the manual publish above when the bundled font set
-changes (which is rare).
+After `@superdoc-dev/fonts@0.1.0` and `fonts-v0.1.0` exist, semantic-release owns all later
+versions. The automated workflow verifies both bootstrap artifacts before it runs semantic-release.
+Changes under `packages/fonts/**`, `shared/**`, or `pnpm-workspace.yaml` can trigger the package
+release. The publish helper rebuilds the package before publishing so `dist/` and `assets/` are
+present in the npm tarball.
 
 ## Keeping in sync with `superdoc`
 
-The font set is owned by `superdoc` core (`shared/font-system`); this package only ships the binaries
-for it. When core adds or removes a bundled family, republish this package so the two stay aligned.
-The resolver throws on an unknown face filename, so a mismatch surfaces immediately rather than
-rendering a missing font.
+The font set is owned by SuperDoc core (`shared/font-system`). This package ships the binaries and
+bundler URLs for that set. When core adds, removes, or renames bundled font assets, release this
+package so installed `superdoc` and `@superdoc-dev/fonts` stay aligned.
