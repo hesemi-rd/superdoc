@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BUNDLED_FONT_ASSET_URLS, createSuperDocFonts, resolveBundledFontAssetUrl, superdocFonts } from './index';
+import {
+  BUNDLED_FAMILY_NAMES,
+  BUNDLED_FONT_ASSET_URLS,
+  createSuperDocFonts,
+  resolveBundledFontAssetUrl,
+  superdocFonts,
+} from './index';
 
 describe('superdocFonts / resolveBundledFontAssetUrl', () => {
   it('superdocFonts is a ready-made resolveAssetUrl config', () => {
@@ -68,5 +74,14 @@ describe('createSuperDocFonts', () => {
 
   it('accepts case- and quote-variant spellings of bundled families (matched normalized)', () => {
     expect(() => createSuperDocFonts({ include: ['  calibri  ', '"Cambria"'] })).not.toThrow();
+  });
+});
+
+describe('BUNDLED_FAMILY_NAMES', () => {
+  it('is exported as a non-empty list of curatable Word family names', () => {
+    expect(BUNDLED_FAMILY_NAMES.length).toBeGreaterThan(0);
+    expect(BUNDLED_FAMILY_NAMES).toContain('Calibri');
+    // Every advertised name is accepted by the curation API (the list and the validator agree).
+    expect(() => createSuperDocFonts({ include: [...BUNDLED_FAMILY_NAMES] })).not.toThrow();
   });
 });

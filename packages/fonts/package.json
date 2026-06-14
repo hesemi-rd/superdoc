@@ -29,13 +29,15 @@
     "sync": "node scripts/sync-assets.mjs",
     "generate": "node scripts/generate-asset-urls.mjs && pnpm exec tsx scripts/generate-bundled-families.ts",
     "check:families": "pnpm exec tsx scripts/check-bundled-families.ts",
-    "build": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json",
-    "prepare": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json",
+    "build:cdn": "vite build",
+    "build": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vite build",
+    "prepare": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

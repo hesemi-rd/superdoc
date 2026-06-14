@@ -8,15 +8,14 @@ import { getAliases } from '../../../packages/superdoc/vite.config.js';
 const superdocRequire = createRequire(new URL('../../../packages/superdoc/package.json', import.meta.url));
 const vue = superdocRequire('@vitejs/plugin-vue').default;
 
-// Serve the built bundled `.woff2` at `/bundled-fonts/` so the face-load specs can assert real loads
+// Serve the bundled `.woff2` at `/bundled-fonts/` so the face-load specs can assert real loads
 // (200). Deliberately NOT `/fonts/`: the harness's default assetBaseUrl is `/fonts/`, and existing
 // specs rely on it staying UNSERVED - substitutes are advertised but never fetched, so rendered text
 // keeps the logical Word name (e.g. the list-marker specs read the computed family). Serving `/fonts/`
 // globally makes those substitutes load and breaks them. Only the `pack` font mode points here.
-// Production-faithful: serves packages/superdoc/dist/fonts (CI builds superdoc before the behavior
-// job; locally run `pnpm --filter superdoc build`).
+// Served from the canonical source (shared/font-system/assets), so no package build or sync is needed.
 const here = path.dirname(fileURLToPath(import.meta.url));
-const bundledFontsDir = path.resolve(here, '../../../packages/superdoc/dist/fonts');
+const bundledFontsDir = path.resolve(here, '../../../shared/font-system/assets');
 const serveBundledFonts: Plugin = {
   name: 'serve-bundled-fonts',
   configureServer(server) {

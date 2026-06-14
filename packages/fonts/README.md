@@ -40,6 +40,27 @@ That is the whole setup. No copying files into `public/`, no `assetBaseUrl`. The
 written as `new URL('../assets/<file>', import.meta.url)`, which Vite, Webpack 5, Next, Nuxt,
 esbuild, and Parcel all detect, emit, and rewrite to the final hashed path.
 
+### CDN / `<script>` tag (no bundler)
+
+For a plain HTML page, load the browser build and use the `SuperDocFonts` global. It exposes the
+same API, and the faces resolve relative to the script, so there is no bundler and no path config:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@superdoc-dev/fonts/dist/superdoc-fonts.min.js"></script>
+<script>
+  new SuperDoc({
+    selector: '#editor',
+    document: 'contract.docx',
+    fonts: SuperDocFonts.superdocFonts, // or SuperDocFonts.createSuperDocFonts({ exclude: [...] })
+  });
+</script>
+```
+
+The `superdoc` CDN build ships no fonts and shows the baseline until you add this script. Self-hosting
+works too: keep the package's `dist/` and `assets/` in their relative layout, since the faces resolve
+to `../assets/` next to `superdoc-fonts.min.js`.
+
 ### Choosing which fonts
 
 `superdocFonts` enables every reviewed family. To narrow the set, use `createSuperDocFonts` and name

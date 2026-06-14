@@ -47,9 +47,9 @@ export interface FontsConfig {
   map?: Record<string, string>;
   /**
    * Base URL the bundled font `.woff2` are served from, e.g. `/fonts/` or
-   * `https://cdn.example.com/superdoc-fonts/v1/`. Required for npm/SSR/framework deploys
-   * that serve the assets from a non-root path; the CDN `<script>` build auto-detects a
-   * script-relative `./fonts/` default.
+   * `https://cdn.example.com/superdoc-fonts/v1/`, when you self-host the
+   * `@superdoc-dev/fonts` faces. Prefer `@superdoc-dev/fonts` (bundler) or its
+   * `superdoc-fonts.min.js` browser build (CDN), which resolve these URLs for you.
    */
   assetBaseUrl?: string;
   /**

@@ -6,7 +6,7 @@
  * bundled face, including category fallbacks like Verdana). A name outside this set is a typo or an
  * unbundled font, so createSuperDocFonts rejects it instead of silently dropping the intended fonts.
  */
-export const BUNDLED_FAMILY_NAMES: readonly string[] = Object.freeze([
+export const BUNDLED_FAMILY_NAMES = Object.freeze([
   'Arial',
   'Arial Black',
   'Arial MT',
@@ -37,4 +37,11 @@ export const BUNDLED_FAMILY_NAMES: readonly string[] = Object.freeze([
   'Times New Roman',
   'Trebuchet MS',
   'Verdana',
-]);
+] as const);
+
+/**
+ * Union of the Word family names the bundled pack can curate, for autocomplete on
+ * createSuperDocFonts({ include / exclude }). Those options also accept any string (case- and
+ * quote-insensitive, validated at runtime), so a list built from dynamic config still type-checks.
+ */
+export type BundledFontFamilyName = (typeof BUNDLED_FAMILY_NAMES)[number];

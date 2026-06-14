@@ -12,7 +12,7 @@ A Word document asks for fonts like Calibri, Cambria, and Times New Roman. Most 
 
 Without the pack, the toolbar lists one widely available font per CSS generic: Arial for sans-serif, Times New Roman for serif, Courier New for monospace. Each is applied with that generic as a fallback, so it renders acceptably even where the exact font is absent - a readable floor, not an exact-typography guarantee. Wire the pack and the toolbar lists the full reviewed set, and SuperDoc renders the substitutes everywhere. Either way, the Word font name is kept for export.
 
-These substitutes are real `.woff2` files. The browser fetches them from a URL. Installing SuperDoc from npm puts them in `node_modules`, which does not serve them to the browser. So you tell your app where they live. Pick one path.
+These substitutes are real `.woff2` files the browser fetches from a URL. The `superdoc` core does not ship them; the optional `@superdoc-dev/fonts` package does. Pick one path below.
 
 ### Recommended: the `@superdoc-dev/fonts` package
 
@@ -59,7 +59,7 @@ Curation changes the toolbar list and which families SuperDoc substitutes. It do
 
 ### Alternative: host the files yourself
 
-Serve the `.woff2` from your own path or a CDN, then point SuperDoc at them. The files ship in the package at `node_modules/superdoc/dist/fonts/`.
+Serve the `.woff2` from your own path or a CDN, then point SuperDoc at them. The files ship in the `@superdoc-dev/fonts` package at `node_modules/@superdoc-dev/fonts/assets/`; copy them into your served folder.
 
 ```js
 new SuperDoc({
@@ -73,7 +73,21 @@ Use `fonts.resolveAssetUrl` instead for signed or versioned URLs.
 
 ### CDN script build
 
-The CDN build loads the fonts from a path relative to the script. Loading from a public CDN (jsDelivr or unpkg) needs no setup: the fonts resolve to `superdoc@<version>/dist/fonts/...` automatically. If you self-host `superdoc.min.js`, serve its `dist/fonts/` folder beside it.
+The `superdoc` CDN build ships no fonts: by default the toolbar shows the baseline and documents render with system fonts. To load the reviewed pack, add the `@superdoc-dev/fonts` browser build and pass the `SuperDocFonts` global.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@superdoc-dev/fonts/dist/superdoc-fonts.min.js"></script>
+<script>
+  new SuperDoc({
+    selector: '#editor',
+    document: 'contract.docx',
+    fonts: SuperDocFonts.superdocFonts, // or SuperDocFonts.createSuperDocFonts({ exclude: [...] })
+  });
+</script>
+```
+
+From a public CDN (jsDelivr or unpkg) the faces resolve automatically, relative to `superdoc-fonts.min.js`. If you self-host it, keep the package's `dist/` and `assets/` folders in their relative layout.
 
 ### Skipping the pack
 

@@ -13,12 +13,12 @@ export { BUNDLED_MANIFEST } from './bundled-manifest';
  */
 export const DEFAULT_BUNDLED_FONT_BASE = '/fonts/';
 
-// Module-level default base. The CDN/IIFE entry overrides it with a script-relative URL
-// at load (see cdn-entry). The editor's config (resolveAssetUrl / assetBaseUrl) takes
-// precedence over this; it is only the floor of the resolution chain.
+// Module-level default base. A consumer's config (resolveAssetUrl / assetBaseUrl) takes
+// precedence over this; it is only the floor of the resolution chain, reached when the bundled
+// pack is activated without an explicit per-face URL.
 let defaultAssetBase = DEFAULT_BUNDLED_FONT_BASE;
 
-/** Override the default asset base (e.g. the CDN entry sets a script-relative URL). */
+/** Override the default asset base (e.g. a host that serves the pack from a fixed path). */
 export function setBundledFontAssetBase(base: string): void {
   defaultAssetBase = base;
 }
@@ -28,14 +28,14 @@ export function getBundledFontAssetBase(): string {
   return defaultAssetBase;
 }
 
-// Whether the bundled pack is served WITHOUT per-instance config. The CDN `<script>` build ships
-// `fonts/*.woff2` next to `superdoc.min.js`, so its entry marks the pack present; npm consumers
-// signal it per instance via `fonts.resolveAssetUrl` / `fonts.assetBaseUrl` instead. Drives the
-// config-presence gate (`deriveBundledActivation`) so the toolbar/resolver light up the rich pack
-// only when it will actually be served.
+// Whether the bundled pack is served page-globally WITHOUT per-instance config. A host that serves
+// the pack for the whole page can call `markBundledPackPresent()`; consumers normally signal it per
+// instance via `fonts.resolveAssetUrl` / `fonts.assetBaseUrl` (e.g. `@superdoc-dev/fonts`). The
+// built-in CDN build no longer sets this - it is baseline-by-default. Drives the config-presence
+// gate (`deriveBundledActivation`) so the toolbar/resolver light up the rich pack only when served.
 let bundledPackPresent = false;
 
-/** Mark the bundled pack as served page-globally (the CDN build calls this beside its base setter). */
+/** Mark the bundled pack as served page-globally (for hosts that serve it without per-instance config). */
 export function markBundledPackPresent(): void {
   bundledPackPresent = true;
 }
