@@ -76,6 +76,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
+import { getAtomicRunLayoutSize, type MeasureAtomicText } from '@superdoc/common/atomic-run-size';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { DEFAULT_FONT_MEASURE_CONTEXT, type FaceKey, type FontMeasureContext } from '@superdoc/font-system';
@@ -227,11 +228,10 @@ const DEFAULT_CELL_PADDING = { top: 0, left: 4, right: 4, bottom: 0 };
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const ALLOWED_TAB_VALS = new Set<TabStop['val']>(['start', 'center', 'end', 'decimal', 'bar', 'clear']);
 
-// Field annotation pill styling constants
-const FIELD_ANNOTATION_PILL_PADDING = 8; // Border (2px each side) + padding (2px each side)
-const FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER = 1.2; // Line height multiplier for pill height
-const FIELD_ANNOTATION_VERTICAL_PADDING = 6; // Vertical padding/border for pill height
-const DEFAULT_FIELD_ANNOTATION_FONT_SIZE = 16; // Default font size for field annotations
+// Field annotation pill styling constants are shared via @superdoc/common/layout-constants
+// (FIELD_ANNOTATION_PILL_PADDING, FIELD_ANNOTATION_VERTICAL_PADDING,
+// FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER, DEFAULT_FIELD_ANNOTATION_FONT_SIZE) so the fast
+// remeasure path and this full measurer stay in lockstep.
 const DEFAULT_PARAGRAPH_FONT_SIZE = 12;
 const DEFAULT_PARAGRAPH_FONT_FAMILY = 'Arial';
 const isValidFontSize = (value: unknown): value is number =>
@@ -727,6 +727,21 @@ function measureTabAlignmentGroup(
 
   let foundDecimal = false;
 
+  // Field annotation label measurement for the shared atomic-run sizer, using this
+  // group measurer's existing font resolution (buildFontString + measureRunWidth).
+  const measureAtomicText: MeasureAtomicText = (text, atomicRun, fontSize) => {
+    const { font } = buildFontString(
+      {
+        fontFamily: ((atomicRun as { fontFamily?: string }).fontFamily as string) ?? 'Arial',
+        fontSize,
+        bold: (atomicRun as { bold?: boolean }).bold,
+        italic: (atomicRun as { italic?: boolean }).italic,
+      },
+      fontContext,
+    );
+    return measureRunWidth(text, font, ctx, atomicRun as unknown as TextRun, 0);
+  };
+
   for (let i = startRunIndex; i < runs.length; i++) {
     const run = runs[i];
 
@@ -778,42 +793,12 @@ function measureTabAlignmentGroup(
       continue;
     }
 
-    // Measure image runs
-    if (isImageRun(run)) {
-      const leftSpace = run.distLeft ?? 0;
-      const rightSpace = run.distRight ?? 0;
-      const imageWidth = run.width + leftSpace + rightSpace;
-
-      result.runs.push({ runIndex: i, width: imageWidth });
-      result.totalWidth += imageWidth;
-      continue;
-    }
-
-    // Measure math runs (atomic, pre-computed dimensions like images)
-    if (run.kind === 'math') {
-      const mathWidth = (run as { width: number }).width ?? 20;
-      result.runs.push({ runIndex: i, width: mathWidth });
-      result.totalWidth += mathWidth;
-      continue;
-    }
-
-    // Measure field annotation runs
-    if (isFieldAnnotationRun(run)) {
-      const fontSize = (run as { fontSize?: number }).fontSize ?? DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
-      const { font } = buildFontString(
-        {
-          fontFamily: (run as { fontFamily?: string }).fontFamily ?? 'Arial',
-          fontSize,
-          bold: (run as { bold?: boolean }).bold,
-          italic: (run as { italic?: boolean }).italic,
-        },
-        fontContext,
-      );
-      const textWidth = run.displayLabel ? measureRunWidth(run.displayLabel, font, ctx, run, 0) : 0;
-      const pillWidth = textWidth + FIELD_ANNOTATION_PILL_PADDING;
-
-      result.runs.push({ runIndex: i, width: pillWidth });
-      result.totalWidth += pillWidth;
+    // Measure atomic runs (image / math / field annotation) via the shared sizer so
+    // alignment-group widths match the canonical line-pass sizing.
+    if (isImageRun(run) || run.kind === 'math' || isFieldAnnotationRun(run)) {
+      const { width } = getAtomicRunLayoutSize(run, measureAtomicText);
+      result.runs.push({ runIndex: i, width });
+      result.totalWidth += width;
       continue;
     }
 
@@ -894,6 +879,20 @@ async function measureParagraphBlock(
   fontContext: FontMeasureContext,
 ): Promise<ParagraphMeasure> {
   const ctx = getCanvasContext();
+  // Field annotation label measurement for the shared atomic-run sizer. Resolves the
+  // physical render family (the family the pill actually paints) and applies the run's
+  // text-transform so the measured width matches the glyphs on screen.
+  const measureAtomicText: MeasureAtomicText = (text, run, fontSize) => {
+    const family = fontContext.resolvePhysical(
+      ((run as { fontFamily?: string }).fontFamily as string) || 'Arial, sans-serif',
+      faceOf(run as { bold?: boolean; italic?: boolean }),
+    );
+    const weight = (run as { bold?: boolean }).bold ? 'bold' : 'normal';
+    const style = (run as { italic?: boolean }).italic ? 'italic' : 'normal';
+    ctx.font = `${style} ${weight} ${fontSize}px ${family}`;
+    const displayText = applyTextTransform(text, run as Run);
+    return displayText ? ctx.measureText(displayText).width : 0;
+  };
   const wordLayout: WordParagraphLayoutOutput | undefined = block.attrs?.wordLayout as
     | WordParagraphLayoutOutput
     | undefined;
@@ -1795,15 +1794,8 @@ async function measureParagraphBlock(
 
     // Handle image runs
     if (isImageRun(run)) {
-      // Calculate image width including spacing
-      const leftSpace = run.distLeft ?? 0;
-      const rightSpace = run.distRight ?? 0;
-      const imageWidth = run.width + leftSpace + rightSpace;
-
-      // Calculate image height including spacing (for line height)
-      const topSpace = run.distTop ?? 0;
-      const bottomSpace = run.distBottom ?? 0;
-      const imageHeight = run.height + topSpace + bottomSpace;
+      // Width/height (including dist* spacing) come from the shared atomic-run sizer.
+      const { width: imageWidth, height: imageHeight } = getAtomicRunLayoutSize(run, measureAtomicText);
 
       // Determine image position - check active tab group first, then pending alignment
       let imageStartX: number | undefined;
@@ -1927,9 +1919,7 @@ async function measureParagraphBlock(
 
     // Handle math runs (atomic, pre-computed dimensions like images)
     if (run.kind === 'math') {
-      const mathRun = run as { width: number; height: number };
-      const mathWidth = mathRun.width ?? 20;
-      const mathHeight = mathRun.height ?? 24;
+      const { width: mathWidth, height: mathHeight } = getAtomicRunLayoutSize(run, measureAtomicText);
 
       if (!currentLine) {
         currentLine = {
@@ -1958,54 +1948,10 @@ async function measureParagraphBlock(
 
     // Handle field annotation runs (pill-styled form fields)
     if (isFieldAnnotationRun(run)) {
-      // Use displayLabel for text measurement, with fallback defaults
-      const rawDisplayText = run.displayLabel || '';
-      const displayText = applyTextTransform(rawDisplayText, run);
-
-      // Use annotation's typography or fallback to defaults (16px Arial is standard)
-      const annotationFontSize =
-        typeof run.fontSize === 'number'
-          ? run.fontSize
-          : typeof run.fontSize === 'string'
-            ? parseFloat(run.fontSize) || DEFAULT_FIELD_ANNOTATION_FONT_SIZE
-            : DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
-      // Resolve to the physical render family (a per-document fonts.map or the bundled substitute),
-      // the same family the pill paints, so the measured pill width matches the painted glyphs.
-      const annotationFontFamily = fontContext.resolvePhysical(run.fontFamily || 'Arial, sans-serif', faceOf(run));
-
-      // Build font string for measurement
-      const fontWeight = run.bold ? 'bold' : 'normal';
-      const fontStyle = run.italic ? 'italic' : 'normal';
-      const annotationFont = `${fontStyle} ${fontWeight} ${annotationFontSize}px ${annotationFontFamily}`;
-      ctx.font = annotationFont;
-
-      // Measure text width
-      const textWidth = displayText ? ctx.measureText(displayText).width : 0;
-
-      const annotationHorizontalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_PILL_PADDING;
-      const annotationVerticalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_VERTICAL_PADDING;
-
-      // Add pill styling overhead: border (2px each side) + padding (2px each side) = 8px total
-      const annotationWidth = textWidth + annotationHorizontalPadding;
-
-      // Calculate height including pill styling
-      let annotationHeight = annotationFontSize * FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER + annotationVerticalPadding;
-
-      // Signature images are capped to 28px in the renderer; reflect that in measurement.
-      if (run.variant === 'signature' && run.imageSrc) {
-        const signatureHeight = 28 + annotationVerticalPadding;
-        annotationHeight = Math.max(annotationHeight, signatureHeight);
-      }
-
-      // Image annotations use explicit size when provided.
-      if (run.variant === 'image' && run.imageSrc && run.size?.height) {
-        const imageHeight = run.size.height + annotationVerticalPadding;
-        annotationHeight = Math.max(annotationHeight, imageHeight);
-      }
-
-      if (run.variant === 'html' && run.size?.height) {
-        annotationHeight = Math.max(annotationHeight, run.size.height);
-      }
+      // Pill width/height come from the shared atomic-run sizer (single source of
+      // truth with the fast remeasure path); `measureAtomicText` resolves the font
+      // and applies the text-transform exactly as the pill paints.
+      const { width: annotationWidth, height: annotationHeight } = getAtomicRunLayoutSize(run, measureAtomicText);
 
       // If a tab alignment is pending, apply it
       let annotationStartX: number | undefined;
