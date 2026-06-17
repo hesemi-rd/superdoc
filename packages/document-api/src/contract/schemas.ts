@@ -1138,8 +1138,14 @@ const unknownNodeDiagnosticSchema = objectSchema(
 const textSelectorSchema = objectSchema(
   {
     type: { const: 'text', description: "Must be 'text' for text pattern search." },
-    pattern: { type: 'string', description: 'Text or regex pattern to match.' },
-    mode: { enum: ['contains', 'regex'], description: "Match mode: 'contains' (substring) or 'regex'." },
+    pattern: {
+      type: 'string',
+      description: 'Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.',
+    },
+    mode: {
+      enum: ['contains', 'regex'],
+      description: "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
+    },
     caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
     wholeWord: { type: 'boolean', description: 'Require word-boundary matches. Default: false.' },
   },
@@ -1983,13 +1989,18 @@ const planEngineCapabilitiesSchema = objectSchema(
     supportedSetMarks: arraySchema({ type: 'string' }),
     regex: objectSchema(
       {
-        maxPatternLength: { type: 'integer' },
+        maxPatternLength: {
+          type: 'integer',
+          description: 'Maximum allowed regex pattern length for text selectors.',
+        },
       },
       ['maxPatternLength'],
     ),
   },
   ['supportedStepOps', 'supportedNonUniformStrategies', 'supportedSetMarks', 'regex'],
 );
+((planEngineCapabilitiesSchema.properties as Record<string, JsonSchema>).regex as JsonSchema).description =
+  'Regex selector limits enforced by the selector engine. Unsafe patterns are rejected.';
 const capabilitiesOutputSchema = objectSchema(
   {
     global: objectSchema(

@@ -21419,8 +21419,10 @@ _No fields._
       "properties": {
         "regex": {
           "additionalProperties": false,
+          "description": "Regex selector limits enforced by the selector engine. Unsafe patterns are rejected.",
           "properties": {
             "maxPatternLength": {
+              "description": "Maximum allowed regex pattern length for text selectors.",
               "type": "integer"
             }
           },
