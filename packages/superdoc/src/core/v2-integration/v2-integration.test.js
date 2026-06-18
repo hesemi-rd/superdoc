@@ -21,16 +21,16 @@ describe('resolveV2Integration', () => {
   });
 
   it('treats null / non-object integration values as absent', () => {
-    expect(hasRealV2Integration(resolveV2Integration({ v2Integration: null }))).toBe(false);
-    expect(hasRealV2Integration(resolveV2Integration({ v2: 'nope' }))).toBe(false);
+    expect(hasRealV2Integration(resolveV2Integration({ editorIntegration: null }))).toBe(false);
+    expect(hasRealV2Integration(resolveV2Integration({ editorIntegration: 'nope' }))).toBe(false);
   });
 
-  it('forwards an injected integration through config.v2Integration', () => {
+  it('forwards an injected integration through config.editorIntegration', () => {
     const EditorComponent = { name: 'RealV2Editor' };
     const RulerComponent = { name: 'RealV2Ruler' };
     const createGeometryPublisher = () => ({ real: true });
     const integration = resolveV2Integration({
-      v2Integration: { version: 2, EditorComponent, RulerComponent, createGeometryPublisher },
+      editorIntegration: { version: 2, EditorComponent, RulerComponent, createGeometryPublisher },
     });
     expect(integration.version).toBe(2);
     expect(integration.EditorComponent).toBe(EditorComponent);
@@ -39,16 +39,18 @@ describe('resolveV2Integration', () => {
     expect(hasRealV2Integration(integration)).toBe(true);
   });
 
-  it('accepts the neutral `v2` config alias', () => {
+  it('calls config.editorIntegration when a factory is provided', () => {
     const EditorComponent = { name: 'RealV2Editor' };
-    const integration = resolveV2Integration({ v2: { EditorComponent } });
+    const createIntegration = () => ({ version: 2, EditorComponent });
+    const integration = resolveV2Integration({ editorIntegration: createIntegration });
     expect(integration.EditorComponent).toBe(EditorComponent);
+    expect(integration.version).toBe(2);
     expect(hasRealV2Integration(integration)).toBe(true);
   });
 
   it('fills missing optional fields from the stub defaults', () => {
     const EditorComponent = { name: 'RealV2Editor' };
-    const integration = resolveV2Integration({ v2Integration: { EditorComponent } });
+    const integration = resolveV2Integration({ editorIntegration: { EditorComponent } });
     expect(typeof integration.createReviewHydrationController).toBe('function');
     expect(typeof integration.isSyntheticTrackedChangeCommentLaneItem).toBe('function');
   });

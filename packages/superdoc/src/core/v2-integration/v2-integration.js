@@ -2,9 +2,9 @@
 //
 // Public SuperDoc must not depend on V2 implementation packages.
 // Instead, the product injects a single V2 integration object through
-// `config.v2Integration` (or `config.v2`). When no integration is provided, a
-// local stub preserves the existing V1 behavior and surfaces a clear runtime
-// error if `editorVersion: 2` is requested without an integration.
+// `config.editorIntegration`. When no integration is provided, a local stub
+// preserves the existing V1 behavior and surfaces a clear runtime error if
+// `editorVersion: 2` is requested without an integration.
 //
 // The integration is the only seam through which a V2 editor runtime reaches
 // public SuperDoc. A production V2 package can expose the same shape later.
@@ -82,7 +82,8 @@ const StubV2EditorComponent = defineComponent({
     onMounted(() => {
       emit('v2-editor-failed', {
         reason: 'v2-integration-missing',
-        detail: 'SuperDoc: editorVersion: 2 requires a V2 integration. Pass `v2Integration` in the SuperDoc config.',
+        detail:
+          'SuperDoc: editorVersion: 2 requires an editor integration. Pass `editorIntegration` in the SuperDoc config.',
       });
     });
     return () => h('div', { class: 'superdoc-v2-integration-missing' });
@@ -106,12 +107,13 @@ export function createStubV2Integration() {
 }
 
 /**
- * @param {{ v2Integration?: unknown, v2?: unknown } | null | undefined} config
+ * @param {{ editorIntegration?: unknown } | null | undefined} config
  * @returns {SuperDocV2Integration}
  */
 export function resolveV2Integration(config) {
   const stub = createStubV2Integration();
-  const injected = config?.v2Integration ?? config?.v2 ?? null;
+  const candidate = config?.editorIntegration ?? null;
+  const injected = typeof candidate === 'function' ? candidate() : candidate;
   if (!injected || typeof injected !== 'object') return stub;
 
   /** @type {SuperDocV2Integration} */

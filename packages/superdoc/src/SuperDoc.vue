@@ -157,16 +157,16 @@ commentsStore.proxy = proxy;
 
 // Resolve the V2 integration seam from config. Public SuperDoc does not bundle
 // a V2 runtime: the host injects a single integration object
-// (`config.v2Integration` / `config.v2`), and a local stub preserves V1
+// (`config.editorIntegration`), and a local stub preserves V1
 // behavior when none is provided. The V2 editor / ruler components and the
 // geometry + review hydration factories all arrive through this object.
-const v2Integration = resolveV2Integration(proxy.$superdoc.config);
+const resolvedEditorIntegration = resolveV2Integration(proxy.$superdoc.config);
 // ui-phase2-001: the v2 DOCX editor wrapper now comes from the injected
 // integration, so the v1 default bundle never references the V2 host runtime.
-const V2SuperEditor = markRaw(v2Integration.EditorComponent);
+const V2SuperEditor = markRaw(resolvedEditorIntegration.EditorComponent);
 // ui-phase4-002: v2 ruler (optional). Falls back to the stub editor component's
 // sibling null when the integration does not provide one.
-const V2Ruler = v2Integration.RulerComponent ? markRaw(v2Integration.RulerComponent) : null;
+const V2Ruler = resolvedEditorIntegration.RulerComponent ? markRaw(resolvedEditorIntegration.RulerComponent) : null;
 
 const floatingComments = computed(() => {
   const currentFloatingComments = unref(commentsStore.getFloatingComments);
@@ -620,7 +620,7 @@ const onEditorDestroy = () => {
 // stay separate — this controller never reads or waits on the geometry
 // publisher. The concrete controller arrives through the injected V2
 // integration.
-const v2ReviewHydrationController = v2Integration.createReviewHydrationController({
+const v2ReviewHydrationController = resolvedEditorIntegration.createReviewHydrationController({
   hydrateComments: (ctx) => commentsStore.hydrateCommentsFromV2?.(ctx),
   hydrateTrackedChanges: (ctx) => commentsStore.hydrateTrackedChangesFromV2?.(ctx),
 });
@@ -1006,7 +1006,7 @@ const publishV2PendingPositionEntry = (entry) => {
 // caching, pending-row preservation, missing-mount/layers clearing, and
 // scroll/resize/zoom recollection (see `v2-geometry-publisher.js`). The
 // SuperDoc.vue side only feeds payloads and observes the published state.
-const v2GeometryPublisher = v2Integration.createGeometryPublisher({
+const v2GeometryPublisher = resolvedEditorIntegration.createGeometryPublisher({
   getLayersContainer: () => layers.value ?? null,
   isCommentsEnabled: () => shouldRenderCommentsInViewing.value,
   publishPositions: (positions) => handleEditorLocationsUpdate(positions),

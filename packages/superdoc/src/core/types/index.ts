@@ -2086,17 +2086,12 @@ export interface Config {
    */
   editorVersion?: 1 | 2;
   /**
-   * Opaque v2 editor integration object supplied by the host product. Public
-   * SuperDoc does not bundle the v2 runtime; it resolves the editor, ruler,
-   * and shell bridge factories from this injected seam when `editorVersion: 2`
-   * is enabled.
+   * Opaque editor integration object or factory supplied by the host product.
+   * Public SuperDoc does not bundle the v2 runtime; it resolves the editor,
+   * ruler, and shell bridge factories from this injected seam when
+   * `editorVersion: 2` is enabled.
    */
-  v2Integration?: unknown;
-  /**
-   * Alias for `v2Integration`, accepted as a neutral top-level config key for
-   * host products that inject the v2 integration as `v2`.
-   */
-  v2?: unknown;
+  editorIntegration?: unknown;
   /**
    * Zoom behavior: the initial zoom level and optional fit-width
    * policy. See `SuperDocZoomConfig`.

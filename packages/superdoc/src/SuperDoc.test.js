@@ -333,7 +333,7 @@ const isTestV2SyntheticTrackedChangeRow = (row) =>
   row.trackedChangeAnchorKey.startsWith('tc::body::');
 
 // SuperDoc.vue now receives the v2 editor / ruler components through the
-// injected `config.v2Integration` seam. Build a test integration with
+// injected `config.editorIntegration` seam. Build a test integration with
 // lightweight local stubs so the public package does not import V2 implementation code.
 const buildTestV2Integration = () => ({
   version: 2,
@@ -532,8 +532,8 @@ const createSuperdocStub = () => {
       layoutEngineOptions: {},
       // Inject the v2 integration seam so the editorVersion: 2 branch resolves
       // the stub editor / ruler components. v1 tests keep editorVersion: 1, so
-      // the integration is present but never rendered.
-      v2Integration: buildTestV2Integration(),
+      // the integration factory is present but never rendered.
+      editorIntegration: buildTestV2Integration,
     },
     activeEditor: null,
     toolbar,
@@ -3621,7 +3621,7 @@ describe('SuperDoc.vue', () => {
       await flushPromises();
       await nextTick();
       // The component rendered for the v2 branch is exactly the one supplied via
-      // config.v2Integration.EditorComponent (the test stub), proving the seam
+      // config.editorIntegration.EditorComponent (the test stub), proving the seam
       // forwards the integration's component provider.
       expect(wrapper.findComponent(V2SuperEditorStub).exists()).toBe(true);
     });
@@ -3630,7 +3630,7 @@ describe('SuperDoc.vue', () => {
       const superdocStub = createSuperdocStub();
       superdocStub.config.editorVersion = 2;
       // No integration injected: the local stub must fail closed.
-      delete superdocStub.config.v2Integration;
+      delete superdocStub.config.editorIntegration;
       const wrapper = await mountComponent(superdocStub);
       await flushPromises();
       await nextTick();
