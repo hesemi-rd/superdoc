@@ -5687,8 +5687,45 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
     expect(span.dataset.trackChangeAuthorColor).toBe('#8250df');
     expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#8250df');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('#8250df22');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('');
     expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#8250df44');
+  });
+
+  it('does not turn named author colors into opaque tracked-change backgrounds', () => {
+    const trackedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'tracked-block',
+      runs: [
+        {
+          text: 'Inserted content',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          trackedChange: {
+            kind: 'insert',
+            id: 'change-1',
+            author: 'Reviewer 1',
+            color: 'red',
+          },
+        },
+      ],
+      attrs: {
+        trackedChangesMode: 'review',
+        trackedChangesEnabled: true,
+      },
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      trackedBlock.id,
+      trackedBlock.runs[0].text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [trackedBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-line span') as HTMLElement;
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('red');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('');
   });
 
   it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {

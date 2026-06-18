@@ -144,8 +144,9 @@ export const useCommentsStore = defineStore('comments', () => {
 
   // ui-phase3-003: SuperDoc-facing v2 tracked-change adapter. Populated by
   // SuperDoc.vue on `v2-editor-ready` so the store can list / focus / decide
-  // tracked changes through v2 host APIs and route sidebar accept/reject
-  // through `host.dispatch({ kind: 'review.trackedChangeDecide', ... })`.
+  // tracked changes. Mutation-plane consolidation: sidebar accept/reject route
+  // through the adapter's temporary compatibility wrappers, which delegate to
+  // `activeEditor.doc.trackChanges.decide(...)` — not `host.dispatch(...)`.
   // shallowRef: preserve object identity for stamping. See note on
   // `v2CommentsAdapter` above.
   const v2TrackedChangesAdapter = shallowRef(null);
@@ -1392,11 +1393,11 @@ export const useCommentsStore = defineStore('comments', () => {
   const addComment = ({ superdoc, comment, skipEditorUpdate = false, broadcastChanges = true }) => {
     const v2Adapter = !skipEditorUpdate ? getV2CommentsAdapter(superdoc) : null;
     if (v2Adapter && !comment.trackedChange) {
-      // ui-phase3-002: in v2 mode the create / reply path dispatches through
-      // the v2 host. Vue state is not mutated until the receipt commits and
-      // we refresh from `host.getHandles().comments.list()`. This keeps the
-      // sidebar receipt-driven; rejected dispatches never produce orphan
-      // sidebar rows.
+      // ui-phase3-002: in v2 mode the create / reply path delegates to the
+      // Document API compatibility adapter. Vue state is not mutated until
+      // the synchronous receipt commits and we refresh from
+      // `host.getHandles().comments.list()`. This keeps the sidebar
+      // receipt-driven; rejected mutations never produce orphan sidebar rows.
       const text = pendingComment.value ? currentCommentText.value : comment.commentText;
       const parentCommentId = comment.parentCommentId
         ? String(comment.parentCommentId)
@@ -1579,9 +1580,9 @@ export const useCommentsStore = defineStore('comments', () => {
   // the same contract.
   //
   // Failure semantics for all helpers:
-  //   - empty / missing inputs reject before dispatch with a named reason
+  //   - empty / missing inputs reject before mutation with a named reason
   //   - capability gate (`canWrite === false`) returns the cap.reason without
-  //     dispatch; success-shaped events are not emitted
+  //     mutating; success-shaped events are not emitted
   //   - adapter throws are normalized to `{ ok: false, reason: 'adapter-threw' }`
   //   - stale-adapter (teardown/remount) returns `{ ok: false, reason: 'adapter-stale' }`
   //   - rejected outcomes emit a single `comments-update` event with
@@ -1645,8 +1646,8 @@ export const useCommentsStore = defineStore('comments', () => {
    * Reply to an existing comment through the v2 adapter.
    *
    * Plan §4.1 rules:
-   *   - empty text rejects before dispatch with `comment-text-empty`
-   *   - missing parent rejects before dispatch with `parent-comment-id-missing`
+   *   - empty text rejects before mutation with `comment-text-empty`
+   *   - missing parent rejects before mutation with `parent-comment-id-missing`
    *   - successful reply refreshes from v2 list and reconciles
    *   - rejection preserves rows and emits a rejected `comments-update` event
    *   - committed-but-refresh-failed surfaces honestly (no reconcile with `[]`)
@@ -1683,7 +1684,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * Edit an existing comment through the v2 adapter.
    *
    * Plan §4.2 rules:
-   *   - empty replacement text rejects with `comment-text-empty` before dispatch
+   *   - empty replacement text rejects with `comment-text-empty` before mutation
    *   - successful edit refreshes from v2 list and reconciles row text
    *   - rejection leaves original row + editing state intact, emits a
    *     rejected `comments-update` event with a stable reason
@@ -2553,20 +2554,20 @@ export const useCommentsStore = defineStore('comments', () => {
   const decideTrackedChangeFromSidebar = ({ superdoc, comment, decision }) => {
     if (!comment?.trackedChange) return { ok: false };
 
-    // ui-phase3-003: v2 mode routes the decision through the v2 tracked-change
-    // adapter. The adapter dispatches `review.trackedChangeDecide` against the
-    // v2 host and refresh/prune is driven by the caller after the receipt
-    // commits. v1 callers fall through to the document-api / v1 command path.
+    // ui-phase3-003: v2 mode keeps this compatibility adapter for row identity,
+    // focus, and refresh behavior, but decisions delegate to the synchronous
+    // Document API (`activeEditor.doc.trackChanges.decide`) rather than host
+    // dispatch. v1 callers fall through to the existing document-api / command
+    // path below.
     const v2Adapter = getV2TrackedChangesAdapter(superdoc);
     if (v2Adapter) {
-      // Plan §4.2: invalid decision values reject before dispatch. The
-      // adapter would also reject, but doing it here avoids a useless
-      // host round-trip and a misleading event-call ordering in callers
-      // that key off the return value.
+      // Plan §4.2: invalid decision values reject before mutation. The
+      // adapter would also reject, but doing it here avoids misleading
+      // event-call ordering in callers that key off the return value.
       if (decision !== 'accept' && decision !== 'reject') {
         return Promise.resolve({ ok: false, reason: 'decision-invalid' });
       }
-      // Capture the decided tracked-change id BEFORE dispatch so we can
+      // Capture the decided tracked-change id before mutation so we can
       // compare against the v2 host's active target after a successful
       // refresh, even if the comment row has been pruned from the store
       // by the reconcile step.

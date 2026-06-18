@@ -660,8 +660,9 @@ const handleAddComment = async () => {
 
 const isV2Mode = computed(() => proxy.$superdoc?.activeEditor?.editorVersion === 2);
 const v2CommentsAdapter = computed(() => (isV2Mode.value ? (proxy.$superdoc?.activeEditor?.v2Comments ?? null) : null));
-// ui-phase3-003: v2 tracked-change adapter accessor — routes accept/reject
-// through `host.dispatch({ kind: 'review.trackedChangeDecide', ... })`.
+// ui-phase3-003: v2 tracked-change adapter accessor. Mutation-plane
+// consolidation: accept/reject route through the adapter's compatibility
+// wrappers, which delegate to `activeEditor.doc.trackChanges.decide(...)`.
 const v2TrackedChangesAdapter = computed(() =>
   isV2Mode.value ? (proxy.$superdoc?.activeEditor?.v2TrackedChanges ?? null) : null,
 );

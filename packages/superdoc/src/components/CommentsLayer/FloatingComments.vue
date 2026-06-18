@@ -9,7 +9,11 @@ import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
-import { normalizeFloatingAnchorTop, shouldMountFloatingCommentDialog } from './floating-comment-positioning.js';
+import {
+  normalizeFloatingAnchorTop,
+  resolvePersistentReviewCardTop,
+  shouldMountFloatingCommentDialog,
+} from './floating-comment-positioning.js';
 
 const ESTIMATED_HEIGHT = 110;
 const OBSERVER_MARGIN = 600;
@@ -173,6 +177,17 @@ const getAnchorTop = (instance) => {
   return instance?.positionEntry?.bounds?.top;
 };
 
+const getAnchorBottom = (instance, anchorTop) => {
+  if (props.currentDocument.type === 'application/pdf') {
+    const zoom = (activeZoom.value ?? 100) / 100;
+    const bottom = Number(instance?.comment?.selection?.selectionBounds?.bottom);
+    return Number.isFinite(bottom) ? bottom * zoom : anchorTop;
+  }
+
+  const bottom = instance?.positionEntry?.bounds?.bottom;
+  return Number.isFinite(bottom) ? bottom : anchorTop;
+};
+
 // Compute anchor position for the pending (new) comment.
 // For editor docs, uses the 'pending' mark position from editorCommentPositions.
 // For PDF docs, falls back to selection bounds (same as getAnchorTop).
@@ -194,6 +209,23 @@ const shouldRenderDialog = (position) => {
     activeCommentInstanceId: activeCommentInstanceId.value,
     comment: position?.commentRef,
   });
+};
+
+const getFloatingViewportRange = () => {
+  const container = floatingCommentsContainer.value;
+  const viewportRect = props.parent?.getBoundingClientRect?.();
+  if (!container || !viewportRect) {
+    return null;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  if (!Number.isFinite(containerRect.top) || !Number.isFinite(viewportRect.top) || !Number.isFinite(viewportRect.bottom)) {
+    return null;
+  }
+
+  const top = viewportRect.top - containerRect.top;
+  const bottom = viewportRect.bottom - containerRect.top;
+  return bottom >= top ? { top, bottom } : null;
 };
 
 const instantAlignmentInstanceKey = computed(() => {
@@ -224,6 +256,7 @@ const allPositions = computed(() => {
       threadId,
       pageIndex: instance?.pageIndex ?? null,
       anchorTop: top,
+      anchorBottom: getAnchorBottom(instance, top),
       top,
       height: measuredHeights.value[key] || ESTIMATED_HEIGHT,
       commentRef: instance.comment,
@@ -238,6 +271,7 @@ const allPositions = computed(() => {
       positions.push({
         id: 'pending',
         anchorTop: pendingTop,
+        anchorBottom: pendingTop,
         top: pendingTop,
         height: measuredHeights.value['pending'] || ESTIMATED_HEIGHT,
         commentRef: pendingComment.value,
@@ -251,6 +285,23 @@ const allPositions = computed(() => {
   const activeKey = hasPending ? 'pending' : activeCommentInstanceId.value;
   const activeIndex = activeKey ? positions.findIndex((p) => p.id === activeKey) : -1;
   resolveCollisions(positions, activeIndex, 15);
+
+  const viewportRange = getFloatingViewportRange();
+  if (viewportRange) {
+    for (const position of positions) {
+      const persistentReviewTop = resolvePersistentReviewCardTop({
+        comment: position.commentRef,
+        anchorTop: position.anchorTop,
+        anchorBottom: position.anchorBottom,
+        cardHeight: position.height,
+        viewportTop: viewportRange.top,
+        viewportBottom: viewportRange.bottom,
+      });
+      if (persistentReviewTop != null) {
+        position.top = persistentReviewTop;
+      }
+    }
+  }
 
   return positions;
 });
@@ -561,9 +612,29 @@ watch(activeZoom, () => {
 
 // Track positioned IDs so we can detect additions/removals
 let prevPositionIds = new Set();
+let prevActiveAnchorTop = null;
 
 // Re-observe when positions change; clean up stale heights and remeasure on add/remove
 watch(allPositions, (positions) => {
+  const activePosition = activeCommentInstanceId.value
+    ? positions.find((position) => position.id === activeCommentInstanceId.value)
+    : null;
+  const activeAnchorTop =
+    typeof activePosition?.anchorTop === 'number' && Number.isFinite(activePosition.anchorTop)
+      ? activePosition.anchorTop
+      : null;
+  const activeAnchorMoved =
+    activeAnchorTop != null && prevActiveAnchorTop != null && Math.abs(activeAnchorTop - prevActiveAnchorTop) > 1;
+  if (
+    activeAnchorMoved &&
+    sidebarOffsetY.value !== 0 &&
+    !Number.isFinite(instantSidebarAlignmentTargetY.value)
+  ) {
+    sidebarOffsetY.value = 0;
+    setInstantLayoutTransitionsDisabled(false);
+  }
+  prevActiveAnchorTop = activeAnchorTop;
+
   const currentIds = new Set(positions.map((p) => p.id));
 
   // Eagerly add new IDs near the viewport so they render immediately.

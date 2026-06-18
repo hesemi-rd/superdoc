@@ -4107,6 +4107,67 @@ describe('SuperDoc.vue', () => {
       expect(superdocStub.broadcastEditorCreate).toHaveBeenCalledWith(facade);
     });
 
+    it('guards mutating v2 Document API facade methods when document mode is viewing', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      const documentApi = {
+        comments: {
+          list: vi.fn(() => ({ items: [] })),
+          get: vi.fn(() => null),
+          create: vi.fn(() => ({ success: true })),
+          patch: vi.fn(() => ({ success: true })),
+          delete: vi.fn(() => ({ success: true })),
+        },
+        trackChanges: {
+          list: vi.fn(() => ({ items: [] })),
+          get: vi.fn(() => null),
+          decide: vi.fn(() => ({ success: true })),
+        },
+        history: {
+          get: vi.fn(() => ({ canUndo: true, canRedo: true })),
+          undo: vi.fn(() => ({ success: true })),
+          redo: vi.fn(() => ({ success: true })),
+        },
+      };
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host: { save: vi.fn(async () => new Uint8Array().buffer), getCapabilities: vi.fn(() => ({})) },
+        mount: { focus: { focus: vi.fn(() => true) } },
+        documentId: 'doc-1',
+        documentApi,
+      });
+      await nextTick();
+
+      const facade = customStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0];
+      expect(facade.doc.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } })).toEqual({
+        success: true,
+      });
+      expect(documentApi.trackChanges.decide).toHaveBeenCalledTimes(1);
+
+      superdocStub.config.documentMode = 'viewing';
+      expect(facade.doc.trackChanges.list()).toEqual({ items: [] });
+      expect(facade.doc.history.get()).toEqual({ canUndo: true, canRedo: true });
+      expect(() => facade.doc.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } })).toThrow(
+        /document is read-only/,
+      );
+      expect(() => facade.doc.comments.create({ text: 'blocked' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.comments.patch({ commentId: 'c-1', text: 'blocked' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.comments.delete({ commentId: 'c-1' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.history.undo()).toThrow(/document is read-only/);
+      expect(() => facade.doc.history.redo()).toThrow(/document is read-only/);
+      expect(documentApi.trackChanges.decide).toHaveBeenCalledTimes(1);
+      expect(documentApi.comments.create).not.toHaveBeenCalled();
+      expect(documentApi.comments.patch).not.toHaveBeenCalled();
+      expect(documentApi.comments.delete).not.toHaveBeenCalled();
+      expect(documentApi.history.undo).not.toHaveBeenCalled();
+      expect(documentApi.history.redo).not.toHaveBeenCalled();
+    });
+
     it('clears a ready v2 facade when the render surface is torn down', async () => {
       const superdocStub = createSuperdocStub();
       superdocStub.config.editorVersion = 2;

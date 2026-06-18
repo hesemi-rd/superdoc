@@ -34,17 +34,15 @@ type HostCommandKind =
   | 'structural.enter'
   | 'structural.listIndent'
   | 'structural.listOutdent'
-  | 'comments.createFromSelection'
-  | 'review.commentReply'
-  | 'review.commentEdit'
-  | 'review.commentResolve'
-  | 'review.commentReopen'
-  | 'review.commentDelete'
-  | 'review.trackedChangeDecide';
+  | string;
 
 interface HostCommandSupportRecordLike {
   readonly command: HostCommandKind | string;
   readonly status: 'supported' | 'unsupported';
+  readonly rejectionCode?: string | null;
+  readonly reason?: string | null;
+  readonly detail?: string | null;
+  readonly enabled?: boolean;
 }
 
 interface HostSelectionStateLike {
@@ -99,20 +97,47 @@ type HostCommandLike =
   | { readonly kind: 'history.redo' }
   | { readonly kind: 'structural.enter' }
   | { readonly kind: 'structural.listIndent' }
-  | { readonly kind: 'structural.listOutdent' }
-  | { readonly kind: 'comments.createFromSelection'; readonly text: string }
-  | { readonly kind: 'review.commentReply'; readonly parentCommentId: string; readonly text: string }
-  | { readonly kind: 'review.commentEdit'; readonly commentId: string; readonly text: string }
-  | { readonly kind: 'review.commentResolve'; readonly commentId: string }
-  | { readonly kind: 'review.commentReopen'; readonly commentId: string }
-  | { readonly kind: 'review.commentDelete'; readonly commentId: string }
-  | {
-      readonly kind: 'review.trackedChangeDecide';
-      readonly input: {
-        readonly decision: 'accept' | 'reject';
-        readonly target: { readonly id: string } | { readonly scope: 'all' };
-      };
-    };
+  | { readonly kind: 'structural.listOutdent' };
+
+interface DocumentFacadeReceiptLike {
+  readonly success?: boolean;
+  readonly failure?: unknown;
+}
+
+interface DocumentFacadeHistoryResultLike {
+  readonly noop?: boolean;
+  readonly reason?: string;
+}
+
+interface DocumentFacadeSelectionInfoLike {
+  readonly empty?: boolean;
+  readonly target?: unknown;
+}
+
+interface DocumentFacadeLike {
+  readonly comments?: {
+    create?(input: { text: string; target?: unknown; parentCommentId?: string }): DocumentFacadeReceiptLike;
+    patch?(input: { commentId: string; text?: string; status?: 'resolved' | 'active' }): DocumentFacadeReceiptLike;
+    delete?(input: { commentId: string }): DocumentFacadeReceiptLike;
+  };
+  readonly trackChanges?: {
+    decide?(input: {
+      decision: 'accept' | 'reject';
+      target: { kind: 'id'; id: string } | { kind: 'all' };
+    }): DocumentFacadeReceiptLike;
+  };
+  readonly history?: {
+    undo?(): DocumentFacadeHistoryResultLike;
+    redo?(): DocumentFacadeHistoryResultLike;
+  };
+  readonly selection?: {
+    current?(input?: { includeText?: boolean }): DocumentFacadeSelectionInfoLike;
+  };
+}
+
+type DocumentFacadeResultLike =
+  | { readonly available: true; readonly doc: DocumentFacadeLike }
+  | { readonly available: false; readonly reason?: string };
 
 interface HostPageMetricsSnapshotLike {
   readonly pages: readonly unknown[];
@@ -143,6 +168,7 @@ interface ModeAwareHostLike {
   save(options?: { format?: 'docx' }): Promise<ArrayBuffer>;
   dispose(): Promise<void>;
   getHandles(): HostHandlesLike;
+  getDocumentFacade?(): DocumentFacadeResultLike;
   getPageMetricsSnapshot(): HostPageMetricsSnapshotLike;
   subscribePageMetrics?(listener: (snapshot: HostPageMetricsSnapshotLike) => void): () => void;
   setZoom(percent: number): HostSetZoomResultLike;
@@ -211,6 +237,13 @@ function commandKindForSupport(kind: EditorRuntimeCommandKind): HostCommandKind 
       return 'structural.listIndent';
     case 'structural.outdent':
       return 'structural.listOutdent';
+    default:
+      return null;
+  }
+}
+
+function reviewCommandKindForSupport(kind: EditorRuntimeCommandKind): string | null {
+  switch (kind) {
     case 'comments.create':
       return 'comments.createFromSelection';
     case 'comments.resolve':
@@ -225,12 +258,45 @@ function commandKindForSupport(kind: EditorRuntimeCommandKind): HostCommandKind 
       return 'review.commentEdit';
     case 'trackedChanges.accept':
     case 'trackedChanges.reject':
-    case 'trackedChanges.acceptAll':
-    case 'trackedChanges.rejectAll':
       return 'review.trackedChangeDecide';
+    case 'trackedChanges.acceptAll':
+      return 'trackedChanges.acceptAll';
+    case 'trackedChanges.rejectAll':
+      return 'trackedChanges.rejectAll';
     default:
       return null;
   }
+}
+
+function supportRecordFor(current: HostSnapshotLike, command: string): HostCommandSupportRecordLike | null {
+  return current.editableSubset.commands.find((entry) => entry.command === command) ?? null;
+}
+
+function supportRecordIsSupported(record: HostCommandSupportRecordLike | null): boolean {
+  return record?.status === 'supported' || record?.enabled === true;
+}
+
+function supportRecordRejectionCode(record: HostCommandSupportRecordLike | null): string | null {
+  return record?.rejectionCode ?? record?.reason ?? null;
+}
+
+function supportRecordDetail(record: HostCommandSupportRecordLike | null): string | undefined {
+  return record?.detail ?? undefined;
+}
+
+function isHostCommandSupported(current: HostSnapshotLike, command: string): boolean {
+  return supportRecordIsSupported(supportRecordFor(current, command));
+}
+
+function unsupportedRuntimeRejection(
+  current: HostSnapshotLike,
+  command: string,
+): { reason: EditorRuntimeRejectionCode; detail?: string } {
+  const record = supportRecordFor(current, command);
+  const rawCode = supportRecordRejectionCode(record);
+  if (rawCode) return { reason: rejectionCode(rawCode), detail: supportRecordDetail(record) };
+  if (current.documentMode === 'viewing') return { reason: 'document-readonly', detail: 'review-surface-read-only' };
+  return { reason: 'command-unsupported', detail: `unsupported:${command}` };
 }
 
 function historyNoopReason(
@@ -372,16 +438,29 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
     });
   }
 
+  function getDocumentFacade(): DocumentFacadeLike | null {
+    const result = host.getDocumentFacade?.() ?? null;
+    return result?.available === true ? result.doc : null;
+  }
+
+  function hasDocumentReviewFacade(): boolean {
+    const doc = getDocumentFacade();
+    return Boolean(doc?.comments && doc.trackChanges);
+  }
+
   function supportedCommands(current: HostSnapshotLike): readonly EditorRuntimeCommandKind[] {
     if (current.state !== 'ready') return [];
-    const supported = new Set(
-      current.editableSubset.commands.filter((entry) => entry.status === 'supported').map((entry) => entry.command),
-    );
-    const runtimeKinds = [...TEXT_AND_STRUCTURE_COMMANDS, ...REVIEW_COMMANDS].filter((kind) => {
+    const runtimeKinds = TEXT_AND_STRUCTURE_COMMANDS.filter((kind) => {
       const mapped = commandKindForSupport(kind);
-      return mapped !== null && supported.has(mapped);
+      return mapped !== null && isHostCommandSupported(current, mapped);
     });
-    return [...runtimeKinds, ...ALWAYS_SUPPORTED_COMMANDS];
+    const reviewKinds = hasDocumentReviewFacade()
+      ? REVIEW_COMMANDS.filter((kind) => {
+          const mapped = reviewCommandKindForSupport(kind);
+          return mapped !== null && isHostCommandSupported(current, mapped);
+        })
+      : [];
+    return [...runtimeKinds, ...reviewKinds, ...ALWAYS_SUPPORTED_COMMANDS];
   }
 
   function capabilities(current: HostSnapshotLike = snapshot): EditorRuntimeCapabilities {
@@ -404,11 +483,16 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
       persistence: { canSave: true, canExportDocx: true },
       comments: {
         supported: true,
-        canMutate: current.commentCommandsReason !== 'author-required',
+        canMutate:
+          current.commentCommandsReason !== 'author-required'
+          && ['comments.create', 'comments.resolve', 'comments.reopen', 'comments.delete', 'comments.reply', 'comments.edit']
+            .some((kind) => availableCommands.includes(kind as EditorRuntimeCommandKind)),
       },
       trackedChanges: {
         supported: true,
-        canDecide: current.state === 'ready',
+        canDecide:
+          availableCommands.includes('trackedChanges.accept')
+          || availableCommands.includes('trackedChanges.reject'),
         canToggleAuthoring: current.state === 'ready',
       },
     };
@@ -433,6 +517,93 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
       reason: current.reason,
       capabilities: capabilities(current),
     };
+  }
+
+  function resultFromReceipt(receipt: DocumentFacadeReceiptLike | undefined): EditorRuntimeCommandResult {
+    if (receipt?.success === true) {
+      invalidatePositionTokens();
+      return { status: 'committed', receipt };
+    }
+    if (receipt && 'failure' in receipt) {
+      return { status: 'receipt-failure', failure: receipt.failure };
+    }
+    return { status: 'rejected', reason: 'command-failed' };
+  }
+
+  function resultFromHistory(
+    kind: 'history.undo' | 'history.redo',
+    result: DocumentFacadeHistoryResultLike | undefined,
+  ): EditorRuntimeCommandResult {
+    if (!result) return { status: 'rejected', reason: 'command-failed' };
+    if (result.noop === true) {
+      return { status: 'history-noop', reason: historyNoopReason(kind, result), result };
+    }
+    invalidatePositionTokens();
+    return { status: 'history-committed', result };
+  }
+
+  function dispatchReviewCommand(command: EditorRuntimeCommand): EditorRuntimeCommandResult | null {
+    const reviewCommand = reviewCommandKindForSupport(command.kind);
+    if (reviewCommand) {
+      if (!isHostCommandSupported(snapshot, reviewCommand)) {
+        const rejection = unsupportedRuntimeRejection(snapshot, reviewCommand);
+        return { status: 'rejected', reason: rejection.reason, detail: rejection.detail };
+      }
+    }
+    const historyCommand = commandKindForSupport(command.kind);
+    if ((command.kind === 'history.undo' || command.kind === 'history.redo') && historyCommand) {
+      if (!isHostCommandSupported(snapshot, historyCommand)) {
+        const rejection = unsupportedRuntimeRejection(snapshot, historyCommand);
+        return { status: 'rejected', reason: rejection.reason, detail: rejection.detail };
+      }
+    }
+    const doc = getDocumentFacade();
+    if (!doc) {
+      return REVIEW_COMMANDS.includes(command.kind)
+        ? { status: 'rejected', reason: 'review-command-unavailable' }
+        : null;
+    }
+    try {
+      switch (command.kind) {
+        case 'comments.create': {
+          const selection = doc.selection?.current?.();
+          const target = selection?.empty === false ? selection.target : undefined;
+          return resultFromReceipt(doc.comments?.create?.({ text: command.text, ...(target ? { target } : {}) }));
+        }
+        case 'comments.resolve':
+          return resultFromReceipt(doc.comments?.patch?.({ commentId: command.commentId, status: 'resolved' }));
+        case 'comments.reopen':
+          return resultFromReceipt(doc.comments?.patch?.({ commentId: command.commentId, status: 'active' }));
+        case 'comments.delete':
+          return resultFromReceipt(doc.comments?.delete?.({ commentId: command.commentId }));
+        case 'comments.reply':
+          return resultFromReceipt(
+            doc.comments?.create?.({ parentCommentId: command.parentCommentId, text: command.text }),
+          );
+        case 'comments.edit':
+          return resultFromReceipt(doc.comments?.patch?.({ commentId: command.commentId, text: command.text }));
+        case 'trackedChanges.accept':
+          return resultFromReceipt(
+            doc.trackChanges?.decide?.({ decision: 'accept', target: { kind: 'id', id: command.id } }),
+          );
+        case 'trackedChanges.reject':
+          return resultFromReceipt(
+            doc.trackChanges?.decide?.({ decision: 'reject', target: { kind: 'id', id: command.id } }),
+          );
+        case 'trackedChanges.acceptAll':
+          return resultFromReceipt(doc.trackChanges?.decide?.({ decision: 'accept', target: { kind: 'all' } }));
+        case 'trackedChanges.rejectAll':
+          return resultFromReceipt(doc.trackChanges?.decide?.({ decision: 'reject', target: { kind: 'all' } }));
+        case 'history.undo':
+          return resultFromHistory('history.undo', doc.history?.undo?.());
+        case 'history.redo':
+          return resultFromHistory('history.redo', doc.history?.redo?.());
+        default:
+          return null;
+      }
+    } catch (error) {
+      return { status: 'rejected', reason: 'command-failed', detail: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   function handleHostSnapshot(next: HostSnapshotLike): void {
@@ -485,6 +656,9 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
       return { status: 'committed' };
     }
 
+    const documentApiResult = dispatchReviewCommand(command);
+    if (documentApiResult) return documentApiResult;
+
     let mapped: HostCommandLike | null = null;
     switch (command.kind) {
       case 'text.insert':
@@ -516,48 +690,6 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
         break;
       case 'structural.outdent':
         mapped = { kind: 'structural.listOutdent' };
-        break;
-      case 'comments.create':
-        mapped = { kind: 'comments.createFromSelection', text: command.text };
-        break;
-      case 'comments.resolve':
-        mapped = { kind: 'review.commentResolve', commentId: command.commentId };
-        break;
-      case 'comments.reopen':
-        mapped = { kind: 'review.commentReopen', commentId: command.commentId };
-        break;
-      case 'comments.delete':
-        mapped = { kind: 'review.commentDelete', commentId: command.commentId };
-        break;
-      case 'comments.reply':
-        mapped = { kind: 'review.commentReply', parentCommentId: command.parentCommentId, text: command.text };
-        break;
-      case 'comments.edit':
-        mapped = { kind: 'review.commentEdit', commentId: command.commentId, text: command.text };
-        break;
-      case 'trackedChanges.accept':
-        mapped = {
-          kind: 'review.trackedChangeDecide',
-          input: { decision: 'accept', target: { id: command.id } },
-        };
-        break;
-      case 'trackedChanges.reject':
-        mapped = {
-          kind: 'review.trackedChangeDecide',
-          input: { decision: 'reject', target: { id: command.id } },
-        };
-        break;
-      case 'trackedChanges.acceptAll':
-        mapped = {
-          kind: 'review.trackedChangeDecide',
-          input: { decision: 'accept', target: { scope: 'all' } },
-        };
-        break;
-      case 'trackedChanges.rejectAll':
-        mapped = {
-          kind: 'review.trackedChangeDecide',
-          input: { decision: 'reject', target: { scope: 'all' } },
-        };
         break;
       default:
         return { status: 'rejected', reason: 'command-unsupported', detail: command.kind };

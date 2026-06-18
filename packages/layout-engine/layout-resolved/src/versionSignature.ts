@@ -76,6 +76,7 @@ const trackedChangeVersion = (run: TextRun): string =>
         trackedChange.author ?? '',
         trackedChange.authorEmail ?? '',
         trackedChange.authorImage ?? '',
+        trackedChange.color ?? '',
         trackedChange.date ?? '',
         trackedChange.before ? JSON.stringify(trackedChange.before) : '',
         trackedChange.after ? JSON.stringify(trackedChange.after) : '',

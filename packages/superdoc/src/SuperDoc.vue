@@ -688,6 +688,51 @@ const clearActiveV2EditorFacade = (documentId = null) => {
   proxy.$superdoc.setActiveEditor(null);
 };
 
+const assertV2DocumentApiCanMutate = (operation) => {
+  if (isViewingMode()) {
+    throw new Error(`activeEditor.doc.${operation}: document is read-only.`);
+  }
+};
+
+const guardV2DocumentApiMutation = (owner, method, operation) => {
+  if (!owner || typeof owner[method] !== 'function') return owner?.[method];
+  return (...args) => {
+    assertV2DocumentApiCanMutate(operation);
+    return owner[method](...args);
+  };
+};
+
+const createGuardedV2DocumentApi = (documentApi) => {
+  if (!documentApi) return null;
+  const comments = documentApi.comments
+    ? {
+        ...documentApi.comments,
+        create: guardV2DocumentApiMutation(documentApi.comments, 'create', 'comments.create'),
+        patch: guardV2DocumentApiMutation(documentApi.comments, 'patch', 'comments.patch'),
+        delete: guardV2DocumentApiMutation(documentApi.comments, 'delete', 'comments.delete'),
+      }
+    : undefined;
+  const trackChanges = documentApi.trackChanges
+    ? {
+        ...documentApi.trackChanges,
+        decide: guardV2DocumentApiMutation(documentApi.trackChanges, 'decide', 'trackChanges.decide'),
+      }
+    : undefined;
+  const history = documentApi.history
+    ? {
+        ...documentApi.history,
+        undo: guardV2DocumentApiMutation(documentApi.history, 'undo', 'history.undo'),
+        redo: guardV2DocumentApiMutation(documentApi.history, 'redo', 'history.redo'),
+      }
+    : undefined;
+  return {
+    ...documentApi,
+    ...(comments ? { comments } : {}),
+    ...(trackChanges ? { trackChanges } : {}),
+    ...(history ? { history } : {}),
+  };
+};
+
 const onV2EditorReady = (payload) => {
   if (!payload) return;
   const {
@@ -697,6 +742,9 @@ const onV2EditorReady = (payload) => {
     capabilities,
     commentsAdapter,
     trackedChangesAdapter,
+    documentApi,
+    documentMutationReadiness,
+    documentApiUnavailableReason,
     pageMetrics,
     pageLayout,
     pageFurniture,
@@ -711,6 +759,7 @@ const onV2EditorReady = (payload) => {
     const bytes = await saveV2Bytes();
     return new Blob([bytes], { type: DOCX });
   };
+  const guardedDocumentApi = createGuardedV2DocumentApi(documentApi);
   const facade = {
     editorVersion: 2,
     documentId,
@@ -727,11 +776,34 @@ const onV2EditorReady = (payload) => {
     capabilities: capabilities ?? host?.getCapabilities?.() ?? null,
     save: saveV2Bytes,
     exportDocx: exportV2Docx,
-    doc: {
-      selection: {
-        current: () => readV2SelectionInfo(host),
-      },
-    },
+    // Mutation-plane consolidation: `activeEditor.doc` is the SuperDoc-facing
+    // synchronous Document API mutation surface for normal inline v2. It is the
+    // structural facade emitted by the v2 browser shell (backed by the private
+    // raw inline `V2DocumentApiHost.doc`), so v2 comment / tracked-change /
+    // history mutations route through `activeEditor.doc.*`. The live browser
+    // `selection.current` read is preserved here rather than using the raw
+    // headless selection adapter. In worker mode `documentApi` is null (no sync
+    // Document API across the worker boundary) and only selection is exposed so
+    // mutation UI fails closed.
+    doc: guardedDocumentApi
+      ? {
+          ...guardedDocumentApi,
+          selection: {
+            current: () => readV2SelectionInfo(host),
+          },
+        }
+      : {
+          selection: {
+            current: () => readV2SelectionInfo(host),
+          },
+        },
+    // Visual readiness helper emitted beside the document facade. Callers that
+    // need painted overlay/sidebar/geometry evidence await
+    // `documentMutationReadiness.whenPainted(...)` after a committed receipt.
+    documentMutationReadiness: documentMutationReadiness ?? null,
+    // Stable reason when the synchronous Document API facade is unavailable
+    // (worker-backed v2). Null when `doc.comments` / `doc.trackChanges` are live.
+    documentApiUnavailableReason: documentApiUnavailableReason ?? null,
     focus: () => {
       if (mount?.focus && typeof mount.focus.focus === 'function') {
         return mount.focus.focus();
@@ -773,9 +845,13 @@ const onV2EditorReady = (payload) => {
     },
     /**
      * The v2 active-editor facade explicitly does NOT carry v1 commands /
-     * state / view / chain / can. Callers that need to dispatch must go
-     * through the host's `dispatch(...)` API. Chrome that still uses the
-     * v1 surface must be gated behind `superdoc.config.editorVersion === 1`.
+     * state / view / chain / can. Document mutations (comments, tracked
+     * changes, history) go through `activeEditor.doc.*` — the synchronous
+     * Document API facade above. Narrow read / focus / reveal / active-target
+     * controls use their explicit bridge surfaces (`v2Comments` /
+     * `v2TrackedChanges`); those are not review mutation routes. Chrome that
+     * still uses the v1 surface must be gated behind
+     * `superdoc.config.editorVersion === 1`.
      */
     commands: null,
     state: null,
@@ -1107,19 +1183,27 @@ const onV2RenderCleared = () => {
   v2RulerReady.value = false;
 };
 
-// ui-phase3-003: refresh tracked-change rows from the v2 host after every
-// committed mutation. The v2 host paints the next layout immediately after
-// commit, but the tracked-change list view is the source of truth for the
-// sidebar — re-list and reconcile so decided rows disappear and the row
-// alias keys stay in sync with the painted carriers.
+// ui-phase3-003 / mutation-plane consolidation: refresh v2 review rows from
+// the v2 host after every committed mutation. Direct sidebar mutations already
+// settle their own adapter refresh, but document-level history undo/redo
+// commits through `activeEditor.doc.history.*`; this listener keeps comments
+// and tracked-change sidebars reconciled with the document model.
 const onV2HostEvent = (event) => {
   if (!event) return;
   if (event.type !== 'mutation:committed') return;
-  const adapter = proxy.$superdoc?.activeEditor?.v2TrackedChanges ?? null;
-  if (!adapter) return;
+  const commentsAdapter = proxy.$superdoc?.activeEditor?.v2Comments ?? null;
+  if (commentsAdapter) {
+    void commentsStore.hydrateCommentsFromV2?.({
+      superdoc: proxy.$superdoc,
+      adapter: commentsAdapter,
+      documentId: proxy.$superdoc?.activeEditor?.documentId ?? null,
+    });
+  }
+  const trackedChangesAdapter = proxy.$superdoc?.activeEditor?.v2TrackedChanges ?? null;
+  if (!trackedChangesAdapter) return;
   void commentsStore.hydrateTrackedChangesFromV2?.({
     superdoc: proxy.$superdoc,
-    adapter,
+    adapter: trackedChangesAdapter,
     documentId: proxy.$superdoc?.activeEditor?.documentId ?? null,
   });
 };

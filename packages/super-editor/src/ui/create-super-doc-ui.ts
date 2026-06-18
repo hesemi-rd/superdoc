@@ -298,10 +298,13 @@ function resolveFreshToolbarSources(superdoc: SuperDocUIOptions['superdoc']) {
 function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
   try {
     const sources = resolveFreshToolbarSources(superdoc);
-    return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
+    const routedEditor = (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
+    if (routedEditor) return routedEditor;
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
   }
+  const activeEditor = (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
+  return activeEditor?.doc ? activeEditor : null;
 }
 
 /**
@@ -1322,6 +1325,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // Refresh caches before recomputing state so subscribers see the
     // new document's current data.
     refreshCommentsListCache();
+    refreshTrackChangesListCache();
     refreshContentControlsListCache();
     refreshFontOptionsCache();
     scheduleNotify();
@@ -1994,6 +1998,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // SD-2667/S4 (filed separately).
 
   const requireDocTrackChanges = () => {
+    if (
+      superdoc.config?.documentMode === 'viewing' ||
+      superdoc.config?.modules?.trackChanges?.enabled === false
+    ) {
+      throw new Error('ui.trackChanges: tracked-change decisions are unavailable in read-only mode.');
+    }
     // Always go through the host editor — `trackChanges.decide` is
     // document-wide and the change's own `address.story` (carried in
     // the decide target) tells the adapter which story to operate
