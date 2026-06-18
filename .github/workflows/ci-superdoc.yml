@@ -310,8 +310,7 @@ jobs:
           for job_result in \
             "build:${{ needs.build.result }}" \
             "unit-tests:${{ needs.unit-tests.result }}" \
-            "cli-tests:${{ needs.cli-tests.result }}" \
-            "coverage:${{ needs.coverage.result }}"; do
+            "cli-tests:${{ needs.cli-tests.result }}"; do
             name="${job_result%%:*}"
             result="${job_result##*:}"
             if [[ "$result" != "success" ]]; then

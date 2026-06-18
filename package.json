@@ -4,6 +4,7 @@
   "license": "AGPL-3.0",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
+    "ci:local": "node scripts/oss-local-ci.mjs",
     "test": "node scripts/test.mjs",
     "test:bench": "VITEST_BENCH=true vitest run",
     "test:slow": "VITEST_SLOW=1 VITEST_DOM=node vitest run --root ./packages/super-editor --exclude '**/node_modules/**' src/editors/v1/tests/editor/node-import-timing.test.js",
