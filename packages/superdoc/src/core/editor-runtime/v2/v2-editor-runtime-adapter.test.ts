@@ -9,9 +9,7 @@ function createReadyHost(overrides: Record<string, unknown> = {}) {
       documentMode: 'editing',
       editableSubset: {
         editingMounted: true,
-        commands: [
-          { command: 'review.trackedChangeDecide', status: 'supported', rejectionCode: null, detail: null },
-        ],
+        commands: [{ command: 'review.trackedChangeDecide', status: 'supported', rejectionCode: null, detail: null }],
       },
       commentCommandsReason: null,
     }),

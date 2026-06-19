@@ -484,15 +484,20 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
       comments: {
         supported: true,
         canMutate:
-          current.commentCommandsReason !== 'author-required'
-          && ['comments.create', 'comments.resolve', 'comments.reopen', 'comments.delete', 'comments.reply', 'comments.edit']
-            .some((kind) => availableCommands.includes(kind as EditorRuntimeCommandKind)),
+          current.commentCommandsReason !== 'author-required' &&
+          [
+            'comments.create',
+            'comments.resolve',
+            'comments.reopen',
+            'comments.delete',
+            'comments.reply',
+            'comments.edit',
+          ].some((kind) => availableCommands.includes(kind as EditorRuntimeCommandKind)),
       },
       trackedChanges: {
         supported: true,
         canDecide:
-          availableCommands.includes('trackedChanges.accept')
-          || availableCommands.includes('trackedChanges.reject'),
+          availableCommands.includes('trackedChanges.accept') || availableCommands.includes('trackedChanges.reject'),
         canToggleAuthoring: current.state === 'ready',
       },
     };
@@ -602,7 +607,11 @@ export function createV2EditorRuntimeAdapter(options: V2EditorRuntimeAdapterOpti
           return null;
       }
     } catch (error) {
-      return { status: 'rejected', reason: 'command-failed', detail: error instanceof Error ? error.message : String(error) };
+      return {
+        status: 'rejected',
+        reason: 'command-failed',
+        detail: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
