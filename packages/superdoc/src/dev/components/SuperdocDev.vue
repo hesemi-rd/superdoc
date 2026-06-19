@@ -548,8 +548,6 @@ const attachServerActivityStream = async () => {
 
 const init = async () => {
   // If the dev shell re-initializes (e.g. on file upload), tear down the previous instance first.
-  detachWordOverlayListener();
-  removeWordOverlay();
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
