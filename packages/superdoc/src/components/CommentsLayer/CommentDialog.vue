@@ -366,14 +366,16 @@ const checkOverflow = () => {
 watch(parentBodyRef, () => {
   nextTick(checkOverflow);
 });
-// Reset truncation, thread collapse, and reply state when card becomes inactive
+const resetInactiveThreadState = () => {
+  textExpanded.value = false;
+  threadExpanded.value = false;
+  isReplying.value = false;
+  nextTick(() => emit('resize'));
+};
+
+// Reset truncation, thread collapse, and reply state when card becomes inactive.
 watch(isDialogActive, (active) => {
-  if (!active) {
-    textExpanded.value = false;
-    threadExpanded.value = false;
-    isReplying.value = false;
-    nextTick(() => emit('resize'));
-  }
+  if (!active) resetInactiveThreadState();
 });
 
 /* ── Step 3: Thread collapse ──
@@ -388,7 +390,6 @@ const childComments = computed(() => comments.value.slice(1));
 const shouldCollapseThread = computed(() => {
   if (props.comment.trackedChange) return false;
   if (threadExpanded.value) return false;
-  if (isDialogActive.value || activeCommentBelongsToDialog.value) return false;
   return childComments.value.length >= 2;
 });
 
@@ -431,6 +432,11 @@ const expandThread = () => {
   setFocus();
   nextTick(() => emit('resize'));
 };
+
+watch(activeComment, (commentId) => {
+  if (commentId === props.comment.commentId) return;
+  resetInactiveThreadState();
+});
 
 const isInternalDropdownDisabled = computed(() => {
   if (props.comment.resolvedTime) return true;

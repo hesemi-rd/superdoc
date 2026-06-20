@@ -1917,7 +1917,7 @@ describe('SuperDoc core', () => {
     expect(setDocumentMode).toHaveBeenLastCalledWith('suggesting');
   });
 
-  it('routes document mode changes through all registered runtimes for a document before falling back to legacy editors', async () => {
+  it('routes document mode changes through registered runtimes and their presentation editors before legacy fallback', async () => {
     const { superdocStore } = createAppHarness();
     const legacyDocMode = vi.fn();
     const runtimeBackedEditorMode = vi.fn();
@@ -1958,13 +1958,13 @@ describe('SuperDoc core', () => {
     instance.registerEditorRuntime(runtimeA);
     instance.registerEditorRuntime(runtimeB);
 
-    instance.setDocumentMode('viewing');
+    instance.setDocumentMode('suggesting');
 
-    expect(setModeA).toHaveBeenCalledWith('viewing');
-    expect(setModeB).toHaveBeenCalledWith('viewing');
+    expect(setModeA).toHaveBeenCalledWith('suggesting');
+    expect(setModeB).toHaveBeenCalledWith('suggesting');
     expect(runtimeBackedEditorMode).not.toHaveBeenCalled();
-    expect(runtimeBackedPresentationMode).not.toHaveBeenCalled();
-    expect(legacyDocMode).toHaveBeenCalledWith('viewing');
+    expect(runtimeBackedPresentationMode).toHaveBeenCalledWith('suggesting');
+    expect(legacyDocMode).toHaveBeenCalledWith('suggesting');
   });
 
   it('syncs a stale presentation host class after runtime document-mode propagation', async () => {

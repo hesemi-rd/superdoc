@@ -1519,6 +1519,67 @@ describe('CommentDialog.vue', () => {
     expect(headers[2].props('comment').commentId).toBe('child-2');
   });
 
+  it('re-collapses an expanded thread when active comment leaves the parent thread', async () => {
+    const replyOne = reactive({
+      uid: 'uid-reply-1',
+      commentId: 'reply-1',
+      parentCommentId: 'comment-1',
+      email: 'reply1@example.com',
+      commentText: '<p>First reply</p>',
+      createdTime: 1000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+    const replyTwo = reactive({
+      uid: 'uid-reply-2',
+      commentId: 'reply-2',
+      parentCommentId: 'comment-1',
+      email: 'reply2@example.com',
+      commentText: '<p>Second reply</p>',
+      createdTime: 2000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      extraComments: [replyOne, replyTwo],
+      props: { autoFocus: false },
+    });
+
+    commentsStoreStub.activeComment.value = 'comment-1';
+    await nextTick();
+
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    expect(collapsedPill.exists()).toBe(true);
+    await collapsedPill.trigger('click');
+    await nextTick();
+    expect(wrapper.findAll('.conversation-item')).toHaveLength(3);
+
+    commentsStoreStub.activeComment.value = replyTwo.commentId;
+    await nextTick();
+
+    expect(wrapper.find('.collapsed-replies').exists()).toBe(true);
+    expect(wrapper.findAll('.conversation-item')).toHaveLength(2);
+  });
+
   it('threads range-based comments under tracked change parent', async () => {
     const rangeBasedRoot = reactive({
       uid: 'uid-range-root',

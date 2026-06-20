@@ -2391,23 +2391,25 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   #applyDocumentMode(doc: RuntimeDocument, mode: DocumentMode) {
     const documentId = typeof doc.id === 'string' && doc.id.length > 0 ? doc.id : null;
     const presentationEditor = typeof doc.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
+    let appliedToRuntime = false;
     if (documentId) {
       const runtimes = this.#editorRuntimeRegistry.getAllByDocumentId(documentId);
       if (runtimes.length > 0) {
         for (const runtime of runtimes) {
           runtime.setDocumentMode(mode);
         }
-        if (presentationEditor && this.#isPresentationModeClassStale(presentationEditor, mode)) {
-          presentationEditor.setDocumentMode(mode);
-        }
-        return;
+        appliedToRuntime = true;
       }
     }
 
     if (presentationEditor) {
-      presentationEditor.setDocumentMode(mode);
+      if (!appliedToRuntime || mode !== 'viewing' || this.#isPresentationModeClassStale(presentationEditor, mode)) {
+        presentationEditor.setDocumentMode(mode);
+      }
       return;
     }
+    if (appliedToRuntime) return;
+
     const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
     if (editor) {
       editor.setDocumentMode(mode);

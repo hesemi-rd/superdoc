@@ -6352,7 +6352,17 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #syncActiveStorySessionDocumentMode(session: StoryPresentationSession | null): void {
-    if (!session || session.kind !== 'note') {
+    if (!session) {
+      return;
+    }
+
+    if (session.kind === 'headerFooter') {
+      this.#headerFooterSession?.setDocumentMode(this.#documentMode);
+      this.#headerFooterSession?.syncEditorDocumentMode(session.editor);
+      return;
+    }
+
+    if (session.kind !== 'note') {
       return;
     }
 

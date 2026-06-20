@@ -2008,8 +2008,7 @@ const collectTouchedChangeIds = (transaction) => {
   return collectTouchedTrackedChangeIds(transaction, { trackChangesPluginKey: TrackChangesBasePluginKey });
 };
 
-const onEditorTransaction = (payload = {}) => {
-  const { editor, transaction } = payload;
+const queueTrackedChangeCommentResyncForTransaction = ({ editor, transaction } = {}) => {
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
 
   // Call sync on editor transaction for undo/redo in both local history
@@ -2036,6 +2035,10 @@ const onEditorTransaction = (payload = {}) => {
       changeIds: collectTouchedChangeIds(transaction),
     });
   }
+};
+
+const onEditorTransaction = (payload = {}) => {
+  queueTrackedChangeCommentResyncForTransaction(payload);
 
   emitEditorTransaction(buildEditorTransactionPayload(payload));
 };
