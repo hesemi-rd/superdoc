@@ -163,10 +163,49 @@ const DEBUG_TEXT_REWRITE =
   typeof process !== 'undefined' && typeof process.env?.SUPERDOC_DEBUG_TEXT_REWRITE === 'string'
     ? process.env.SUPERDOC_DEBUG_TEXT_REWRITE === '1'
     : false;
+const TRACKED_REWRITE_BATCH_META = 'documentApiTrackedRewriteBatch';
+const TRACKED_REWRITE_CHANGED_META = 'documentApiTrackedRewriteChanged';
 
 function debugTextRewrite(message: string, details?: Record<string, unknown>): void {
   if (!DEBUG_TEXT_REWRITE) return;
   console.error('[text-rewrite]', message, details ?? {});
+}
+
+function isTrackedMutationTransaction(tr: Transaction): boolean {
+  return tr.getMeta?.('forceTrackChanges') === true;
+}
+
+function isTrackedRewriteBatchTransaction(tr: Transaction): boolean {
+  // The first changed rewrite can still use granular word-diff safely; later
+  // changed rewrites in the same tracked batch use a coarse replace so previous
+  // tracked insert/delete maps do not corrupt their positions.
+  return (
+    isTrackedMutationTransaction(tr) && tr.getMeta(TRACKED_REWRITE_BATCH_META) === true && hasTrackedRewriteChanged(tr)
+  );
+}
+
+function hasTrackedRewriteChanged(tr: Transaction): boolean {
+  return tr.getMeta?.(TRACKED_REWRITE_CHANGED_META) === true;
+}
+
+function markTrackedRewriteChanged(tr: Transaction): void {
+  if (!isTrackedMutationTransaction(tr)) return;
+  tr.setMeta?.(TRACKED_REWRITE_CHANGED_META, true);
+}
+
+function countTextRewriteTargets(compiled: CompiledPlan): number {
+  return compiled.mutationSteps.reduce((count, compiledStep) => {
+    return compiledStep.step.op === 'text.rewrite' ? count + compiledStep.targets.length : count;
+  }, 0);
+}
+
+export function applyMutationPlanMeta(tr: Transaction, compiled: CompiledPlan, changeMode: 'direct' | 'tracked'): void {
+  if (changeMode === 'tracked') {
+    applyTrackedMutationMeta(tr);
+    if (countTextRewriteTargets(compiled) > 1) tr.setMeta(TRACKED_REWRITE_BATCH_META, true);
+  } else {
+    applyDirectMutationMeta(tr);
+  }
 }
 
 type StructuredTextPayload = {
@@ -882,6 +921,10 @@ export function executeTextRewrite(
   step: TextRewriteStep,
   mapping: Mapping,
 ): { changed: boolean } {
+  const finish = (changed: boolean): { changed: boolean } => {
+    if (changed) markTrackedRewriteChanged(tr);
+    return { changed };
+  };
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
 
@@ -897,6 +940,17 @@ export function executeTextRewrite(
   const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
   const parentAllowsLineBreakAt = (pos: number): boolean =>
     lineBreakNodeType ? parentAllowsNodeAt(tr, pos, lineBreakNodeType) : false;
+  const replaceTextRange = (from: number, to: number, text: string, parentPos: number): void => {
+    if (text.length === 0) {
+      tr.delete(from, to);
+      return;
+    }
+
+    const content = buildTextWithTabs(editor.state.schema, text, asProseMirrorMarks(marks), {
+      parentAllowsLineBreak: parentAllowsLineBreakAt(parentPos),
+    });
+    tr.replaceWith(from, to, content);
+  };
   const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
 
   if (structuralRewrite) {
@@ -917,7 +971,7 @@ export function executeTextRewrite(
       // containers that cannot host sibling paragraph nodes.
       tr.doc.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
       tr.replace(structuralRewrite.replaceFrom, structuralRewrite.replaceTo, slice);
-      return { changed: replacementText !== target.text };
+      return finish(replacementText !== target.text);
     } catch (error) {
       debugTextRewrite('structural rewrite fell back to inline replacement', {
         replaceFrom: structuralRewrite.replaceFrom,
@@ -942,15 +996,8 @@ export function executeTextRewrite(
   const replLen = replacementText.length;
 
   if (rangeTouchesTrackedReviewState(tr.doc, absFrom, absTo)) {
-    if (replacementText.length === 0) {
-      tr.delete(absFrom, absTo);
-      return { changed: target.text.length > 0 };
-    }
-    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks), {
-      parentAllowsLineBreak: parentAllowsLineBreakAt(absFrom),
-    });
-    tr.replaceWith(absFrom, absTo, content);
-    return { changed: replacementText !== target.text };
+    replaceTextRange(absFrom, absTo, replacementText, absFrom);
+    return finish(replacementText.length === 0 ? target.text.length > 0 : replacementText !== target.text);
   }
 
   let prefix = 0;
@@ -958,7 +1005,7 @@ export function executeTextRewrite(
     prefix++;
   }
   if (prefix === origLen && prefix === replLen) {
-    return { changed: false }; // texts are identical
+    return finish(false); // texts are identical
   }
   let suffix = 0;
   while (
@@ -973,6 +1020,11 @@ export function executeTextRewrite(
   const trimmedTo = charOffsetToDocPos(tr.doc, absFrom, absTo, origLen - suffix);
   const trimmedOld = originalText.slice(prefix, origLen - suffix);
   const trimmedNew = replacementText.slice(prefix, replLen - suffix);
+
+  if (isTrackedRewriteBatchTransaction(tr)) {
+    replaceTextRange(trimmedFrom, trimmedTo, trimmedNew, trimmedFrom);
+    return finish(replacementText !== target.text);
+  }
 
   // 2. Word-level diff on the trimmed range for multi-word granularity.
   const wordChanges = getWordChanges(trimmedOld, trimmedNew);
@@ -1031,7 +1083,7 @@ export function executeTextRewrite(
     tr.replaceWith(trimmedFrom, trimmedTo, content);
   }
 
-  return { changed: replacementText !== target.text };
+  return finish(replacementText !== target.text);
 }
 
 /**
@@ -1347,6 +1399,8 @@ export function executeSpanTextRewrite(
   // Build replacement content: one text node per block, separated by paragraph nodes
   // For single replacement block, use flat replacement into the span
   if (replacementBlocks.length === 1) {
+    if (target.segments.length === 1 && replacementBlocks[0] === target.text) return { changed: false };
+
     const marks = resolveSpanMarks(editor, target, policy, step.id);
     // Probe parent admission so a newline replacement into a `text*`-only span
     // parent falls back to literal text (the export safety net handles the rest).
@@ -1356,6 +1410,7 @@ export function executeSpanTextRewrite(
       parentAllowsLineBreak,
     });
     tr.replaceWith(absFrom, absTo, content);
+    markTrackedRewriteChanged(tr);
     return { changed: true };
   }
 
@@ -1383,6 +1438,7 @@ export function executeSpanTextRewrite(
   const slice = new Slice(Fragment.from(nodes), 1, 1);
   tr.replace(absFrom, absTo, slice);
 
+  markTrackedRewriteChanged(tr);
   return { changed: true };
 }
 
@@ -2378,11 +2434,7 @@ export function executeCompiledPlan(
   const tr = editor.state.tr;
   const changeMode = options.changeMode ?? 'direct';
 
-  if (changeMode === 'tracked') {
-    applyTrackedMutationMeta(tr);
-  } else {
-    applyDirectMutationMeta(tr);
-  }
+  applyMutationPlanMeta(tr, compiled, changeMode);
 
   const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, {
     throwOnAssertFailure: true,
