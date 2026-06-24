@@ -19,6 +19,7 @@ import {
   getSdtContainerKey,
   getSdtContainerMetadata,
   hasExplicitSdtContainerKey,
+  resolveRenderedSdtBoundary,
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
@@ -233,6 +234,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
   const contentLeft = tableBorderWidths?.left ?? 0;
   const contentTop = tableBorderWidths?.top ?? 0;
+  const effectiveSdtBoundary = resolveRenderedSdtBoundary(block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
   // Apply SDT container styling (document sections, structured content blocks)
   if (
@@ -241,7 +243,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       container,
       block.attrs?.sdt,
       block.attrs?.containerSdt,
-      sdtBoundary,
+      effectiveSdtBoundary,
       {
         ancestorContainerKey,
         ancestorContainerSdt,

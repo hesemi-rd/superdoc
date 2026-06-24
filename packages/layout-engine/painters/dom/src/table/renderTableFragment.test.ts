@@ -136,6 +136,59 @@ describe('renderTableFragment', () => {
     expect(element.dataset.pmEnd).toBe('34');
   });
 
+  it('renders a nested table SDT own label when the parent boundary label is suppressed', () => {
+    const parentSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'parent-sdt',
+      alias: 'Parent',
+    };
+    const childSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'child-sdt',
+      alias: 'Child',
+    };
+    const block = createTestTableBlock();
+    block.attrs = {
+      sdt: childSdt,
+      containerSdt: parentSdt,
+    };
+    const measure = createTestTableMeasure();
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      sdtBoundary: {
+        isStart: false,
+        isEnd: true,
+        showLabel: false,
+        ownIsStart: true,
+        ownIsEnd: true,
+        ownShowLabel: true,
+        ownIsNested: true,
+      },
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {
+        // Intentionally empty for test mock
+      },
+      applySdtDataset: () => {
+        // Intentionally empty for test mock
+      },
+      applyStyles: () => {
+        // Intentionally empty for test mock
+      },
+    });
+
+    expect(element.dataset.sdtContainerShowLabel).toBe('true');
+    expect(element.querySelector('.superdoc-structured-content-block__label')?.textContent).toBe('Child');
+  });
+
   it('applies outer left/right borders in separate mode even when cellSpacing is unset or zero', () => {
     const block = createTestTableBlock();
     block.attrs = {

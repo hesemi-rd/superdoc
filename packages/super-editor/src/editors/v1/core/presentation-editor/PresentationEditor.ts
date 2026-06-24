@@ -730,6 +730,8 @@ export class PresentationEditor extends EventEmitter {
   #lastSelectedStructuredContentBlock: {
     id: string | null;
     elements: HTMLElement[];
+    wrapperElements: HTMLElement[];
+    ancestorElements: HTMLElement[];
   } | null = null;
   #lastSelectedStructuredContentInline: {
     id: string | null;
@@ -7966,22 +7968,112 @@ export class PresentationEditor extends EventEmitter {
     this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
       element.classList.remove('ProseMirror-selectednode');
     });
+    this.#lastSelectedStructuredContentBlock.wrapperElements.forEach((element) => {
+      element.classList.remove(DOM_CLASS_NAMES.SDT_CONTAINER_SELECTED);
+    });
+    this.#lastSelectedStructuredContentBlock.ancestorElements.forEach((element) => {
+      element.classList.remove(DOM_CLASS_NAMES.SDT_ANCESTOR_SELECTED);
+    });
     this.#lastSelectedStructuredContentBlock = null;
   }
 
-  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+  #setSelectedStructuredContentBlockClass(
+    elements: HTMLElement[],
+    wrapperElements: HTMLElement[],
+    ancestorElements: HTMLElement[],
+    id: string | null,
+  ) {
     if (
       this.#lastSelectedStructuredContentBlock &&
       this.#lastSelectedStructuredContentBlock.id === id &&
       this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
-      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el)) &&
+      this.#lastSelectedStructuredContentBlock.wrapperElements.length === wrapperElements.length &&
+      this.#lastSelectedStructuredContentBlock.wrapperElements.every((el) => wrapperElements.includes(el)) &&
+      this.#lastSelectedStructuredContentBlock.ancestorElements.length === ancestorElements.length &&
+      this.#lastSelectedStructuredContentBlock.ancestorElements.every((el) => ancestorElements.includes(el))
     ) {
       return;
     }
 
     this.#clearSelectedStructuredContentBlockClass();
     elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
-    this.#lastSelectedStructuredContentBlock = { id, elements };
+    wrapperElements.forEach((element) => element.classList.add(DOM_CLASS_NAMES.SDT_CONTAINER_SELECTED));
+    ancestorElements.forEach((element) => element.classList.add(DOM_CLASS_NAMES.SDT_ANCESTOR_SELECTED));
+    this.#lastSelectedStructuredContentBlock = { id, elements, wrapperElements, ancestorElements };
+  }
+
+  #getStructuredContentBlockExactElementsById(id: string): HTMLElement[] {
+    const indexed = this.#painterAdapter.getStructuredContentBlockElementsById(id);
+    if (indexed.length > 0) return indexed;
+
+    if (!this.#painterHost) return [];
+    return Array.from(this.#painterHost.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}`)).filter(
+      (element) => element.dataset.sdtId === id,
+    );
+  }
+
+  #getStructuredContentBlockWrapperElementsById(id: string): HTMLElement[] {
+    if (!this.#painterHost) return [];
+    return Array.from(this.#painterHost.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}`)).filter(
+      (element) => element.dataset.sdtId === id || element.dataset.sdtContainerId === id,
+    );
+  }
+
+  #resolveSelectedStructuredContentBlockWrapperElements(id: string | null, elements: HTMLElement[]): HTMLElement[] {
+    const wrapperElements = new Set<HTMLElement>();
+    const visitedIds = new Set<string>();
+    const pendingIds: string[] = [];
+
+    const enqueueId = (candidate: string | null | undefined) => {
+      if (!candidate || visitedIds.has(candidate)) return;
+      visitedIds.add(candidate);
+      pendingIds.push(candidate);
+    };
+
+    enqueueId(id);
+    elements.forEach((element) => {
+      wrapperElements.add(element);
+      enqueueId(element.dataset.sdtId);
+    });
+
+    while (pendingIds.length > 0) {
+      const currentId = pendingIds.shift();
+      if (!currentId) continue;
+      const currentElements = this.#getStructuredContentBlockWrapperElementsById(currentId);
+      currentElements.forEach((element) => {
+        wrapperElements.add(element);
+        enqueueId(element.dataset.sdtId);
+      });
+    }
+
+    return [...wrapperElements];
+  }
+
+  #resolveSelectedStructuredContentBlockAncestorElements(id: string | null, elements: HTMLElement[]): HTMLElement[] {
+    const ancestorElements = new Set<HTMLElement>();
+    const visitedIds = new Set<string>();
+    const pendingIds: string[] = [];
+
+    const enqueueId = (candidate: string | null | undefined) => {
+      if (!candidate || candidate === id || visitedIds.has(candidate)) return;
+      visitedIds.add(candidate);
+      pendingIds.push(candidate);
+    };
+
+    elements.forEach((element) => enqueueId(element.dataset.sdtContainerId));
+
+    while (pendingIds.length > 0) {
+      const currentId = pendingIds.shift();
+      if (!currentId) continue;
+      const currentElements = this.#getStructuredContentBlockExactElementsById(currentId);
+      currentElements.forEach((element) => {
+        ancestorElements.add(element);
+        enqueueId(element.dataset.sdtContainerId);
+      });
+    }
+
+    return [...ancestorElements];
   }
 
   #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
@@ -8066,7 +8158,9 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    this.#setSelectedStructuredContentBlockClass(elements, id);
+    const wrapperElements = this.#resolveSelectedStructuredContentBlockWrapperElements(id, elements);
+    const ancestorElements = this.#resolveSelectedStructuredContentBlockAncestorElements(id, elements);
+    this.#setSelectedStructuredContentBlockClass(elements, wrapperElements, ancestorElements, id);
   }
 
   /**
@@ -8086,7 +8180,10 @@ export class PresentationEditor extends EventEmitter {
       hoverClass: DOM_CLASS_NAMES.SDT_GROUP_HOVER,
       // PM-selected SDTs render with their selection style — leave it alone
       // so the hover greying doesn't mask the selection feedback.
-      shouldApplyTo: (element) => !element.classList.contains('ProseMirror-selectednode'),
+      shouldApplyTo: (element) =>
+        !element.classList.contains('ProseMirror-selectednode') &&
+        !element.classList.contains(DOM_CLASS_NAMES.SDT_CONTAINER_SELECTED) &&
+        !element.classList.contains(DOM_CLASS_NAMES.SDT_ANCESTOR_SELECTED),
     });
 
     this.#tocHoverCoordinator = new HoverGroupCoordinator({

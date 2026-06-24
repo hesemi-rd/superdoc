@@ -3800,6 +3800,99 @@ describe('renderTableCell', () => {
       expect(cellElement.style.overflow).toBe('visible');
     });
 
+    it('should render child SDT label when a table cell parent SDT continues into a nested child paragraph', () => {
+      const parentSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'cell-parent-sdt',
+        alias: 'Parent',
+      };
+      const childSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'cell-child-sdt',
+        alias: 'Child',
+      };
+      const parentPara: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-parent-para',
+        runs: [{ text: 'Parent', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: parentSdt },
+      };
+      const childPara: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-child-para',
+        runs: [{ text: 'Child', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: childSdt, containerSdt: parentSdt },
+      };
+      const parentMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 6,
+            width: 50,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      const childMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [parentMeasure, childMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-parent-child-sdt',
+          blocks: [parentPara, childPara],
+          attrs: {},
+        },
+      });
+
+      const chromeElements = Array.from(
+        cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content-block'),
+      );
+      expect(chromeElements).toHaveLength(2);
+      expect(chromeElements[0].dataset.sdtContainerStart).toBe('true');
+      expect(chromeElements[0].dataset.sdtContainerEnd).toBe('false');
+      expect(chromeElements[0].dataset.sdtNextOwnContainerStartsNested).toBe('true');
+      expect(chromeElements[1].dataset.sdtContainerStart).toBe('false');
+      expect(chromeElements[1].dataset.sdtContainerEnd).toBe('true');
+      expect(chromeElements[1].dataset.sdtOwnContainerStart).toBe('true');
+      expect(chromeElements[1].dataset.sdtOwnContainerEnd).toBe('true');
+      expect(chromeElements[1].dataset.sdtOwnContainerNested).toBe('true');
+      expect(chromeElements.map((el) => el.querySelector('.superdoc-structured-content__label')?.textContent)).toEqual([
+        'Parent',
+        'Child',
+      ]);
+    });
+
     it('should set overflow:visible when cell contains documentSection SDT', () => {
       const para: ParagraphBlock = {
         kind: 'paragraph',

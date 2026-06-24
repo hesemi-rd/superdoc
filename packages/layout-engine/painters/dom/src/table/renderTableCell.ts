@@ -18,7 +18,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx, getSdtContainerKey } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
@@ -26,8 +26,7 @@ import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { createBlockImageContent } from '../images/image-block.js';
 import { buildImageHyperlinkAnchor } from '../images/hyperlink.js';
 import {
-  getSdtContainerKeyForBlock,
-  getSdtSiblingBoundaries,
+  getSdtSiblingBoundariesWithOwnContainers,
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
@@ -37,6 +36,32 @@ import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
+
+const getCellBlockSdtBoundaryKey = (block: ParagraphBlock | TableBlock): string | null => {
+  return getSdtContainerKey(block.attrs?.containerSdt) ?? getSdtContainerKey(block.attrs?.sdt);
+};
+
+const getCellBlockOwnSdtBoundaryKey = (block: ParagraphBlock | TableBlock): string | null => {
+  return getSdtContainerKey(block.attrs?.sdt);
+};
+
+const narrowSdtBoundaryFlags = (
+  boundary: SdtBoundaryOptions | undefined,
+  isFirstSlice: boolean,
+  isLastSlice: boolean,
+): SdtBoundaryOptions | undefined => {
+  if (!boundary) return undefined;
+
+  return {
+    ...boundary,
+    isStart: (boundary.isStart ?? true) && isFirstSlice,
+    isEnd: (boundary.isEnd ?? true) && isLastSlice,
+    showLabel: boundary.showLabel === undefined ? undefined : boundary.showLabel && isFirstSlice,
+    ownIsStart: boundary.ownIsStart === undefined ? undefined : boundary.ownIsStart && isFirstSlice,
+    ownIsEnd: boundary.ownIsEnd === undefined ? undefined : boundary.ownIsEnd && isLastSlice,
+    ownShowLabel: boundary.ownShowLabel === undefined ? undefined : boundary.ownShowLabel && isFirstSlice,
+  };
+};
 
 /**
  * Compute the total segment count for a cell's blocks, matching the layout engine's
@@ -486,14 +511,7 @@ function renderPartialEmbeddedTable(params: {
   }
 
   const visibleHeight = computeVisibleHeight(tableMeasure.rows, embeddedFromRow, embeddedToRow, partialRowInfo);
-  const effectiveSdtBoundary = sdtBoundary
-    ? {
-        ...sdtBoundary,
-        isStart: (sdtBoundary.isStart ?? true) && localFrom === 0,
-        isEnd: (sdtBoundary.isEnd ?? true) && localTo >= totalTableSegments,
-        showLabel: sdtBoundary.showLabel === undefined ? undefined : sdtBoundary.showLabel && localFrom === 0,
-      }
-    : undefined;
+  const effectiveSdtBoundary = narrowSdtBoundaryFlags(sdtBoundary, localFrom === 0, localTo >= totalTableSegments);
 
   const tableWrapper = doc.createElement('div');
   tableWrapper.style.position = 'relative';
@@ -748,9 +766,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   const cellBlocks = cell?.blocks ?? (cell?.paragraph ? [cell.paragraph] : []);
   const blockMeasures = cellMeasure?.blocks ?? (cellMeasure?.paragraph ? [cellMeasure.paragraph] : []);
   const sdtContainerKeys = cellBlocks.map((block) =>
-    block.kind === 'paragraph' || block.kind === 'table' ? getSdtContainerKeyForBlock(block) : null,
+    block.kind === 'paragraph' || block.kind === 'table' ? getCellBlockSdtBoundaryKey(block) : null,
   );
-  const sdtBoundaries = getSdtSiblingBoundaries(sdtContainerKeys);
+  const sdtOwnContainerKeys = cellBlocks.map((block) =>
+    block.kind === 'paragraph' || block.kind === 'table' ? getCellBlockOwnSdtBoundaryKey(block) : null,
+  );
+  const sdtBoundaries = getSdtSiblingBoundariesWithOwnContainers(sdtContainerKeys, sdtOwnContainerKeys);
 
   if (cellBlocks.length > 0 && blockMeasures.length > 0) {
     // Content is a child of the cell, positioned relative to it
@@ -999,16 +1020,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
-        const baseSdtBoundary = sdtBoundaries[i];
-        const sdtBoundary = baseSdtBoundary
-          ? {
-              ...baseSdtBoundary,
-              isStart: (baseSdtBoundary.isStart ?? true) && localStartLine === 0,
-              isEnd: (baseSdtBoundary.isEnd ?? true) && localEndLine >= blockLineCount,
-              showLabel:
-                baseSdtBoundary.showLabel === undefined ? undefined : baseSdtBoundary.showLabel && localStartLine === 0,
-            }
-          : undefined;
+        const sdtBoundary = narrowSdtBoundaryFlags(
+          sdtBoundaries[i],
+          localStartLine === 0,
+          localEndLine >= blockLineCount,
+        );
 
         content.appendChild(paraWrapper);
         const result = renderParagraphContent({
