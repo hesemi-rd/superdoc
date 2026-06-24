@@ -380,6 +380,22 @@ const stepTouchesTrackedReviewState = (step: unknown, doc: PmNode): boolean => {
     ) {
       return false;
     }
+    // Editing mode (tracking off): a collapsed direct insertion strictly
+    // inside ANY tracked review span (insertion or deletion) stays direct.
+    // Typing destroys nothing - the existing suggestion is just split around
+    // the new text - so it must not be force-rerouted into a tracked change.
+    // The insertion-interior case already returns false above; this also
+    // covers the deletion-interior case. Safe in suggesting mode because
+    // shouldTrackForComposition is already true there, so the protect path is
+    // irrelevant. The inherited mark is stripped from the new text in
+    // #dispatchTransaction so the typed chars stay plain.
+    if (
+      step.from === step.to &&
+      step.slice.content.size > 0 &&
+      collapsedPositionIsInsideTrackedReviewMark(doc, step.from)
+    ) {
+      return false;
+    }
     if (rangeHasTrackedReviewMark(doc, step.from, step.to)) return true;
     if (step.from === step.to && step.slice.content.size > 0) {
       return (
@@ -409,6 +425,35 @@ const transactionTouchesTrackedReviewState = (state: EditorState, tr: Transactio
   const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
   return tr.steps.some((step, index) => stepTouchesTrackedReviewState(step, docs[index] ?? state.doc));
 };
+
+// Editing-mode collapsed insert strictly inside a tracked review span: returns
+// the inserted range (in the post-step doc) so the inherited suggestion mark can
+// be stripped from the new text. Marks are inclusive:false, so a strictly-interior
+// insert still inherits the neighbour's trackInsert/trackDelete via PM mark
+// inheritance; without the strip the typed chars would silently join the
+// suggestion (struck-through inside a deletion / counted as someone else's insert).
+const collapsedInsertInsideTrackedReviewMarkRange = (
+  state: EditorState,
+  tr: Transaction,
+): { from: number; to: number } | null => {
+  if (!tr.docChanged || tr.steps.length !== 1) return null;
+
+  const [step] = tr.steps;
+  if (!(step instanceof ReplaceStep)) return null;
+  if (step.from !== step.to || step.slice.content.size === 0) return null;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  const docBeforeStep = docs[0] ?? state.doc;
+  if (!collapsedPositionIsInsideTrackedReviewMark(docBeforeStep, step.from)) return null;
+
+  // Use slice.size (content.size - openStart - openEnd) - the size ProseMirror
+  // actually maps the inserted range to (ReplaceStep.getMap uses slice.size). For
+  // an open slice (a multi-paragraph / rich-HTML collapsed paste) content.size
+  // overshoots, so the mark cleanup would strip trackInsert/trackDelete from the
+  // existing suggestion text after the paste.
+  return { from: step.from, to: step.from + step.slice.size };
+};
+
 // Best-effort heuristic for labeling a content-control event's `source`. A
 // click sets `uiEvent: 'click'` on its selection transaction (the precise
 // signal); this window is the fallback for selection changes that don't carry
@@ -3423,12 +3468,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const shouldTrackForComposition = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
       const shouldTrack = shouldTrackForComposition || protectsExistingTrackedReviewState;
+      // Editing-mode collapsed insert strictly inside a tracked review span: the
+      // typed text is made plain below, so it does NOT mutate the surrounding
+      // suggestion. Resolve it up front so the direct-insertion comment-mutation
+      // event is suppressed for this case (otherwise it would emit a stale
+      // commentsUpdate for an insertion that was not actually expanded). A
+      // delete-range edit still fires that event - plainInsertRange is null for
+      // it, since it is not a collapsed insert.
+      const plainInsertRange = !shouldTrack
+        ? collapsedInsertInsideTrackedReviewMarkRange(prevState, transactionToApply)
+        : null;
       if (
         !shouldTrack &&
+        !plainInsertRange &&
         directInsertionMutationCommentMeta &&
         !transactionToApply.getMeta(TrackChangesBasePluginKey)
       ) {
         transactionToApply.setMeta(TrackChangesBasePluginKey, directInsertionMutationCommentMeta);
+      }
+      // PM mark inheritance (inclusive:false) still copies the neighbour
+      // suggestion's trackInsert/trackDelete/trackFormat onto a strictly-interior
+      // insert. Strip those marks from the inserted range (and clear them from
+      // stored marks) so the typed chars stay plain and the existing suggestion
+      // is simply split around them. Composition-meta-agnostic: deferral never
+      // runs in editing mode, so this normalizes both IME and non-IME inserts.
+      if (plainInsertRange) {
+        const schemaMarks = prevState.schema.marks;
+        for (const markName of [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]) {
+          const markType = schemaMarks[markName];
+          if (!markType) continue;
+          transactionToApply.removeMark(plainInsertRange.from, plainInsertRange.to, markType);
+          transactionToApply.removeStoredMark(markType);
+        }
       }
       if (shouldTrack && forceTrackChanges && !this.options.user) {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
