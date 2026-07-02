@@ -163,6 +163,25 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
             "description": "Heading level (1-6).",
             "type": "number"
           },
+          "indent": {
+            "additionalProperties": false,
+            "description": "Direct paragraph indentation in twips (only non-zero fields present).",
+            "properties": {
+              "firstLine": {
+                "type": "number"
+              },
+              "hanging": {
+                "type": "number"
+              },
+              "left": {
+                "type": "number"
+              },
+              "right": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
           "isEmpty": {
             "type": "boolean"
           },
@@ -182,6 +201,46 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
               "image",
               "sdt"
             ]
+          },
+          "numbering": {
+            "additionalProperties": false,
+            "description": "Computed numbering rendering (marker/path/kind) for numbered list items and numbered headings — e.g. the rendered clause label \"2.3.\". Absent for non-numbered blocks.",
+            "properties": {
+              "kind": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "marker": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "path": {
+                "oneOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "type": "object"
           },
           "ordinal": {
             "type": "number"

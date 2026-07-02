@@ -1842,13 +1842,14 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.attach': {
     memberPath: 'lists.attach',
-    description: 'Convert non-list paragraphs to list items under an existing list sequence.',
+    description:
+      'Convert non-list paragraphs to list items under an existing list sequence. With changeMode:"tracked" the former (unnumbered) paragraph properties are recorded as a w:pPrChange so a reviewer can accept/reject the numbering.',
     expectedResult: 'Returns a ListsMutateItemResult confirming attachment.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),

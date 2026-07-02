@@ -171,12 +171,31 @@ function extractBlockFormatting(
   underline?: boolean;
   color?: string;
   alignment?: string;
+  indent?: { left?: number; right?: number; firstLine?: number; hanging?: number };
   headingLevel?: number;
 } {
   const pProps = (node.attrs as Record<string, unknown>).paragraphProperties as
-    | { styleId?: string; justification?: string }
+    | {
+        styleId?: string;
+        justification?: string;
+        indent?: { left?: number; right?: number; firstLine?: number; hanging?: number };
+      }
     | undefined;
   const styleId = pProps?.styleId ?? null;
+  // Direct paragraph indentation (twips), so a contextual-formatting match can
+  // align an inserted paragraph with its neighbors instead of leaving it flush.
+  const rawIndent = pProps?.indent;
+  // Only NON-ZERO fields: a 0 carries no indent intent, and emitting both
+  // firstLine:0 and hanging:0 trips setIndentation's mutual-exclusivity guard
+  // (firstLine and hanging cannot coexist).
+  const indent =
+    rawIndent && typeof rawIndent === 'object'
+      ? (Object.fromEntries(
+          (['left', 'right', 'firstLine', 'hanging'] as const)
+            .filter((k) => typeof rawIndent[k] === 'number' && (rawIndent[k] as number) !== 0)
+            .map((k) => [k, rawIndent[k]]),
+        ) as { left?: number; right?: number; firstLine?: number; hanging?: number })
+      : undefined;
 
   let fontFamily: string | undefined;
   let fontSize: number | undefined;
@@ -229,6 +248,7 @@ function extractBlockFormatting(
     ...(underline ? { underline } : {}),
     ...(color ? { color } : {}),
     ...(pProps?.justification ? { alignment: pProps.justification } : {}),
+    ...(indent && Object.keys(indent).length > 0 ? { indent } : {}),
     ...(headingLevel ? { headingLevel } : {}),
   };
 }
@@ -358,6 +378,16 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
           })
         : undefined;
 
+    // Computed numbering rendering (markerText/path) is maintained on the
+    // node by the numbering plugin. Surfacing it here lets agents see legal
+    // clause numbers ("2.3.") that live on numbered headings/paragraphs and
+    // are otherwise invisible to every read operation.
+    const listRendering = (
+      candidate.node.attrs as {
+        listRendering?: { markerText?: string; path?: number[]; numberingType?: string } | null;
+      }
+    )?.listRendering;
+
     return {
       ordinal: offset + i,
       nodeId: candidate.nodeId,
@@ -366,6 +396,15 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       ...(fullText !== undefined ? { text: fullText } : {}),
       isEmpty: textLength === 0,
       ...extractBlockFormatting(candidate.node, styleCtx),
+      ...(listRendering
+        ? {
+            numbering: {
+              marker: listRendering.markerText ?? null,
+              path: listRendering.path ?? null,
+              kind: listRendering.numberingType ?? null,
+            },
+          }
+        : {}),
       ...(numbering ? { paragraphNumbering: numbering } : {}),
       ...(ref ? { ref } : {}),
     };
