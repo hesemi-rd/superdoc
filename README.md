@@ -142,7 +142,7 @@ Check the [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for o
 ## License
 
 - Open source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
-- Commercial: [Enterprise License](https://www.superdocportal.dev/get-in-touch)
+- Commercial: [SuperDoc Commercial License](https://www.superdocportal.dev/superdoc-terms-of-service)
 
 ## Acknowledgments
 
