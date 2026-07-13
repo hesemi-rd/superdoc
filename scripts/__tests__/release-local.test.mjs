@@ -740,7 +740,7 @@ test('stable recovery tracks PyPI gaps when SDK PyPI publishing is enabled', asy
   );
 });
 
-test('release configs keep GitHub prerelease comments gated while Linear uses the dedicated release-comment policy', async () => {
+test('release configs publish GitHub releases only for stable versions while Linear keeps prerelease breadcrumbs', async () => {
   const releasercPaths = [
     'packages/superdoc/.releaserc.cjs',
     'packages/fonts/.releaserc.cjs',
@@ -768,15 +768,21 @@ test('release configs keep GitHub prerelease comments gated while Linear uses th
       `${releasercPath}: must use the commit-message Linear sync plugin, not the PR-branch-based external plugin`,
     );
 
-    assert.ok(
-      content.includes('const shouldCommentOnRelease = !isPrerelease'),
-      `${releasercPath}: must define shouldCommentOnRelease = !isPrerelease so the prerelease comment gate is consistent across configs`,
-    );
-
     if (usesGithubPlugin) {
       assert.ok(
-        content.includes('successCommentCondition: shouldCommentOnRelease ? undefined : false'),
-        `${releasercPath}: @semantic-release/github must gate successCommentCondition through shouldCommentOnRelease so prereleases don't re-comment on every PR after a stable -> main sync`,
+        content.includes('const shouldPublishGitHubRelease =') &&
+          content.includes('Boolean(branch)') &&
+          content.includes('!isPrerelease'),
+        `${releasercPath}: must fail closed when the release branch is unknown and publish GitHub releases only for stable versions`,
+      );
+      assert.ok(
+        content.includes('if (shouldPublishGitHubRelease)'),
+        `${releasercPath}: must gate @semantic-release/github behind shouldPublishGitHubRelease`,
+      );
+      assert.equal(
+        content.includes('successCommentCondition:'),
+        false,
+        `${releasercPath}: prereleases must omit the GitHub plugin instead of configuring its success hook`,
       );
     }
 
@@ -787,7 +793,7 @@ test('release configs keep GitHub prerelease comments gated while Linear uses th
       );
       assert.ok(
         content.includes('addComment: shouldCommentOnLinearRelease'),
-        `${releasercPath}: Linear addComment must use the dedicated Linear comment gate so prerelease Linear breadcrumbs stay on while GitHub PR comments remain gated`,
+        `${releasercPath}: Linear addComment must use the dedicated Linear comment gate so prerelease breadcrumbs remain available without GitHub Releases`,
       );
       assert.equal(
         content.includes('addComment: true'),
