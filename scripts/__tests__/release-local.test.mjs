@@ -388,15 +388,23 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
   }
 });
 
-test('stable-to-main sync waits for stable release completion', async () => {
+test('stable-to-main sync waits for the stable release lane after stable tooling succeeds', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+  const laneDrainStart = workflow.indexOf('- name: Wait for stable release lane to drain');
+  const laneDrainEnd = workflow.indexOf('- name: Generate token');
+
+  assert.notEqual(laneDrainStart, -1, '.github/workflows/sync-patches.yml: must include the stable lane drain step');
+  assert.notEqual(laneDrainEnd, -1, '.github/workflows/sync-patches.yml: must include the token generation step');
+  assert.ok(laneDrainStart < laneDrainEnd, '.github/workflows/sync-patches.yml: must drain the stable lane before checkout');
+
+  const laneDrainStep = workflow.slice(laneDrainStart, laneDrainEnd);
 
   assert.ok(
     workflow.includes('workflow_run:'),
     '.github/workflows/sync-patches.yml: must trigger from release workflow completion, not directly from stable pushes',
   );
   assert.ok(
-    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(workflow),
+    /workflows:\s*\n\s*-\s*['"]📦 Release stable tooling \(CLI\/SDK\/MCP\)['"]/.test(workflow),
     '.github/workflows/sync-patches.yml: must trigger after the stable release orchestrator completes',
   );
   assert.equal(
@@ -409,9 +417,17 @@ test('stable-to-main sync waits for stable release completion', async () => {
     '.github/workflows/sync-patches.yml: must scope automatic syncs to stable release runs',
   );
   assert.ok(
-    workflow.includes("github.event.workflow_run.conclusion == 'success'") &&
-      workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
-    '.github/workflows/sync-patches.yml: must wait for release completion while still surfacing failed-release sync PRs for review',
+    workflow.includes("github.event.workflow_run.conclusion == 'success'"),
+    '.github/workflows/sync-patches.yml: automatic syncs must require a successful stable tooling release',
+  );
+  assert.equal(
+    workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    false,
+    '.github/workflows/sync-patches.yml: failed stable tooling releases must not push to main automatically',
+  );
+  assert.ok(
+    workflow.includes("github.event_name == 'workflow_dispatch'"),
+    '.github/workflows/sync-patches.yml: manual dispatch must remain available for investigated recovery',
   );
   assert.ok(
     workflow.includes('actions: read'),
@@ -423,10 +439,31 @@ test('stable-to-main sync waits for stable release completion', async () => {
       workflow.includes('"📦 Release template-builder"'),
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
+  assert.equal(
+    laneDrainStep.includes("if: github.event_name == 'workflow_run'"),
+    false,
+    '.github/workflows/sync-patches.yml: manual recovery must also wait for active stable release runs to finish',
+  );
+  for (const removedGate of [
+    'Verify stable release lane succeeded',
+    'id: verify_release_lane',
+    'require_successful_release()',
+    'steps.verify_release_lane.outputs.stable_sha',
+  ]) {
+    assert.equal(
+      workflow.includes(removedGate),
+      false,
+      `.github/workflows/sync-patches.yml: must not retain the aggregate release-health gate (${removedGate})`,
+    );
+  }
 });
 
 test('stable-to-main sync preserves stable release ancestry', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+  const stableShaAssignment = 'stable_sha=$(git rev-parse origin/stable)';
+  const pinIndex = workflow.indexOf(stableShaAssignment);
+  const verificationIndex = workflow.indexOf('git merge-base --is-ancestor "$TRIGGER_STABLE_SHA" "$stable_sha"');
+  const mergeIndex = workflow.indexOf('git merge --no-ff --no-edit "$stable_sha"');
 
   assert.equal(
     workflow.includes('git merge --squash'),
@@ -434,13 +471,26 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
     '.github/workflows/sync-patches.yml: stable-to-main sync must not squash because semantic-release needs stable tags reachable from main',
   );
   assert.ok(
-    workflow.includes('git merge --no-ff --no-edit origin/stable'),
-    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit',
+    mergeIndex !== -1,
+    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit from the pinned stable SHA',
   );
   assert.ok(
-    workflow.includes('git merge-base --is-ancestor origin/stable origin/main') &&
-      workflow.includes('git merge-base --is-ancestor origin/stable HEAD'),
-    '.github/workflows/sync-patches.yml: sync must guard on and verify stable ancestry',
+    pinIndex !== -1 &&
+      (workflow.match(/stable_sha=\$\(git rev-parse origin\/stable\)/g) ?? []).length === 1 &&
+      workflow.indexOf('git fetch origin main stable --tags --prune') < pinIndex &&
+      pinIndex < mergeIndex &&
+      !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('git fetch origin') &&
+      !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('origin/stable') &&
+      pinIndex < verificationIndex &&
+      verificationIndex < mergeIndex &&
+      workflow.includes('TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}') &&
+      workflow.includes('"$TRIGGER_STABLE_SHA..$stable_sha"') &&
+      workflow.includes('semantic-release-bot@martynus.net') &&
+      workflow.includes('release_subject_pattern=') &&
+      workflow.includes('git diff-tree --no-commit-id --name-only -r "$sha"') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_sha" origin/main') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_sha" HEAD'),
+    '.github/workflows/sync-patches.yml: must verify release writeback provenance and files before merging the pinned stable SHA',
   );
   assert.ok(
     workflow.includes('release_artifact_only_conflict') &&
@@ -451,11 +501,11 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
   assert.equal(
     workflow.includes('git add -A'),
     false,
-    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers into review PRs',
+    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers',
   );
   assert.ok(
-    workflow.includes("This PR must be merged with GitHub's merge-commit option"),
-    '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
+    workflow.includes('git push origin HEAD:main'),
+    '.github/workflows/sync-patches.yml: sync must push the verified merge commit directly so stable ancestry is preserved',
   );
 });
 
