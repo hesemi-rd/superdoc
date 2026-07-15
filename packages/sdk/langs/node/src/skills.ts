@@ -61,6 +61,17 @@ function normalizeSkillName(name: unknown): string {
   return normalized;
 }
 
+function normalizeInstallSkillOptions(options: unknown): InstallSkillOptions {
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new SuperDocCliError('Skill install options must be an object.', {
+      code: 'INVALID_ARGUMENT',
+      details: { options },
+    });
+  }
+
+  return options as InstallSkillOptions;
+}
+
 export function listSkills(): string[] {
   try {
     return readdirSync(skillsDir)
@@ -110,7 +121,8 @@ export function getSkill(name: string): string {
 
 export function installSkill(name: string, options: InstallSkillOptions = {}): InstalledSkillResult {
   const normalizedName = normalizeSkillName(name);
-  const runtime = options.runtime ?? 'claude';
+  const normalizedOptions = normalizeInstallSkillOptions(options);
+  const runtime = normalizedOptions.runtime ?? 'claude';
   if (!(SUPPORTED_SKILL_RUNTIMES as readonly string[]).includes(runtime)) {
     throw new SuperDocCliError('Unsupported skill runtime.', {
       code: 'INVALID_ARGUMENT',
@@ -118,7 +130,7 @@ export function installSkill(name: string, options: InstallSkillOptions = {}): I
     });
   }
 
-  const scope = options.scope ?? 'project';
+  const scope = normalizedOptions.scope ?? 'project';
   if (!(SUPPORTED_INSTALL_SCOPES as readonly string[]).includes(scope)) {
     throw new SuperDocCliError('Unsupported skill install scope.', {
       code: 'INVALID_ARGUMENT',
@@ -127,21 +139,21 @@ export function installSkill(name: string, options: InstallSkillOptions = {}): I
   }
 
   const skillsRoot =
-    options.targetDir !== undefined
-      ? path.resolve(options.targetDir)
+    normalizedOptions.targetDir !== undefined
+      ? path.resolve(normalizedOptions.targetDir)
       : scope === 'user'
-        ? path.resolve(options.homeDir ?? os.homedir(), '.claude', 'skills')
-        : path.resolve(options.cwd ?? process.cwd(), '.claude', 'skills');
+        ? path.resolve(normalizedOptions.homeDir ?? os.homedir(), '.claude', 'skills')
+        : path.resolve(normalizedOptions.cwd ?? process.cwd(), '.claude', 'skills');
 
   const skillFile = path.join(skillsRoot, normalizedName, 'SKILL.md');
-  const overwrite = options.overwrite ?? true;
+  const overwrite = normalizedOptions.overwrite ?? true;
   const alreadyExists = existsSync(skillFile);
 
   if (!overwrite && alreadyExists) {
     return {
       name: normalizedName,
       runtime,
-      scope: options.targetDir !== undefined ? 'custom' : scope,
+      scope: normalizedOptions.targetDir !== undefined ? 'custom' : scope,
       path: skillFile,
       written: false,
       overwritten: false,
@@ -160,7 +172,7 @@ export function installSkill(name: string, options: InstallSkillOptions = {}): I
       details: {
         name: normalizedName,
         runtime,
-        scope: options.targetDir !== undefined ? 'custom' : scope,
+        scope: normalizedOptions.targetDir !== undefined ? 'custom' : scope,
         path: skillFile,
         message: error instanceof Error ? error.message : String(error),
       },
@@ -170,7 +182,7 @@ export function installSkill(name: string, options: InstallSkillOptions = {}): I
   return {
     name: normalizedName,
     runtime,
-    scope: options.targetDir !== undefined ? 'custom' : scope,
+    scope: normalizedOptions.targetDir !== undefined ? 'custom' : scope,
     path: skillFile,
     written: true,
     overwritten: alreadyExists,
